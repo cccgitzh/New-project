@@ -17,17 +17,17 @@ HEALTH_CHECK_BATCH_SIZE = "25"
 
 [[kv_namespaces]]
 binding = "NAV_KV"
-id = "replace-with-kv-namespace-id"
-preview_id = "replace-with-preview-kv-namespace-id"
+id = "b7b9c95eb9eb4e01a2e6017e7bcc3b88"
+preview_id = "8d0ff383e3804f27b6bbef8e2bd6af0b"
 
 [[d1_databases]]
 binding = "NAV_DB"
 database_name = "37-nav-db"
-database_id = "replace-with-d1-database-id"
+database_id = "72561014-6760-4879-9477-7a4edb1f431b"
 
 [[vectorize]]
 binding = "NAV_VECTOR"
-index_name = "37-nav-sites"
+index_name = "nav-sites"
 
 [ai]
 binding = "AI"
