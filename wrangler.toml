@@ -1,6 +1,6 @@
 name = "37-nav-api"
 main = "src/index.ts"
-compatibility_date = "2026-05-15"
+compatibility_date = "2026-05-14"
 workers_dev = true
 
 [observability]
