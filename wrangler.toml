@@ -1,0 +1,36 @@
+name = "37-nav-api"
+main = "src/index.ts"
+compatibility_date = "2026-05-15"
+workers_dev = true
+
+[observability]
+enabled = true
+
+[vars]
+# none: open personal lab mode. access: require Cloudflare Zero Trust Access headers.
+AUTH_MODE = "none"
+# Set this to your Pages origin after deployment, for example https://37-nav.pages.dev.
+CORS_ORIGIN = "*"
+# Comma-separated allowlist used only when AUTH_MODE = "access".
+ADMIN_EMAILS = ""
+HEALTH_CHECK_BATCH_SIZE = "25"
+
+[[kv_namespaces]]
+binding = "NAV_KV"
+id = "replace-with-kv-namespace-id"
+preview_id = "replace-with-preview-kv-namespace-id"
+
+[[d1_databases]]
+binding = "NAV_DB"
+database_name = "37-nav-db"
+database_id = "replace-with-d1-database-id"
+
+[[vectorize]]
+binding = "NAV_VECTOR"
+index_name = "37-nav-sites"
+
+[ai]
+binding = "AI"
+
+[triggers]
+crons = ["*/30 * * * *"]

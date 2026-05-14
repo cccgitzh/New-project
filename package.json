@@ -1,0 +1,20 @@
+{
+  "name": "37-nav",
+  "version": "0.1.0",
+  "private": true,
+  "description": "37° Nav - Cloudflare-native personal navigation console.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.toml",
+    "deploy:worker": "wrangler deploy --config wrangler.toml",
+    "deploy:pages": "wrangler pages deploy public --project-name 37-nav",
+    "db:apply:local": "wrangler d1 execute 37-nav-db --local --file=./schema.sql",
+    "db:apply:remote": "wrangler d1 execute 37-nav-db --remote --file=./schema.sql",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260515.0",
+    "typescript": "^5.9.0",
+    "wrangler": "^4.18.0"
+  }
+}
