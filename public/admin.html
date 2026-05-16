@@ -18,6 +18,7 @@
           </div>
         </div>
         <nav id="categoryList" class="category-list" aria-label="分类"></nav>
+        <button id="addCatBtn" class="ghost add-cat-btn">+ 新建分类</button>
         <button id="exportBtn" class="ghost">导出备份</button>
         <label class="ghost file-label">
           导入备份
@@ -66,19 +67,48 @@
     </div>
 
     <dialog id="siteDialog">
-      <form method="dialog" class="dialog-form">
-        <h2 id="dialogTitle">新增站点</h2>
-        <input name="title" placeholder="标题" required />
-        <input name="url" placeholder="https://example.com" required />
-        <textarea name="description" placeholder="备注 / 功能说明"></textarea>
-        <input name="tags_text" placeholder="标签，用逗号分隔" />
-        <select name="category_id"></select>
-        <div class="dialog-actions">
-          <button type="button" id="cancelSiteBtn" class="ghost">取消</button>
-          <button id="saveSiteBtn" value="default" class="primary">保存</button>
-        </div>
-      </form>
-    </dialog>
+   <form method="dialog" class="dialog-form">
+     <div class="hud-header">
+       <h2 id="dialogTitle">新增站点</h2>
+       <button type="button" id="deleteSiteBtn" class="danger-btn" style="display:none;">删除此站点</button>
+     </div>
+     <div class="hud-body">
+       <div class="ai-parse-box">
+         <input id="aiParseInput" placeholder="在此粘贴网址或描述，AI 帮你填表 ->" />
+         <button type="button" id="aiParseBtn" class="ghost">智能识别</button>
+       </div>
+       <div class="hud-grid">
+         <input name="title" placeholder="标题 (必填)" required />
+         <input name="url" placeholder="URL 链接 (必填)" required />
+         <input name="icon" placeholder="图标 (选填Emoji)" />
+         <select name="category_id"></select>
+       </div>
+       <textarea name="description" placeholder="站点描述 (选填)"></textarea>
+       <input name="tags_text" placeholder="标签，用逗号分隔 (选填)" />
+       <div class="dialog-actions">
+         <button type="button" id="cancelSiteBtn" class="ghost">取消</button>
+         <button id="saveSiteBtn" value="default" class="primary">保存数据</button>
+       </div>
+     </div>
+   </form>
+ </dialog>
+
+ <dialog id="categoryDialog">
+   <form method="dialog" class="dialog-form">
+     <div class="hud-header">
+       <h2 id="catDialogTitle">新建分类</h2>
+     </div>
+     <div class="hud-body">
+       <input name="name" placeholder="分类名称 (必填，如：AI 工具)" required />
+       <input name="icon" placeholder="分类图标 (选填 Emoji，如：🤖)" />
+       <input name="slug" placeholder="英文标识 (选填，如 ai-tools)" />
+       <div class="dialog-actions">
+         <button type="button" id="cancelCatBtn" class="ghost">取消</button>
+         <button id="saveCatBtn" value="default" class="primary">保存分类</button>
+       </div>
+     </div>
+   </form>
+ </dialog>
 
     <script src="./config.js"></script>
     <script src="./app.js" type="module"></script>

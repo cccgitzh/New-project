@@ -72,6 +72,7 @@ async function route(request: Request, env: Env, ctx: ExecutionContext, url: URL
   if (path === "/api/search" && method === "GET") return searchSites(env, url);
   if (path === "/api/ai/add-site" && method === "POST") return aiAddSite(request, env, ctx);
   if (path === "/api/ai/organize" && method === "POST") return aiOrganize(env);
+  if (path === "/api/ai/parse" && method === "POST") return aiParse(request, env);
   if (path === "/api/widgets" && method === "GET") return listWidgets(env);
   if (path === "/api/widgets" && method === "POST") return createWidget(request, env);
   if (path === "/api/todos" && method === "GET") return listTodos(env);
@@ -727,4 +728,21 @@ class HttpError extends Error {
   constructor(public status: number, message: string) {
     super(message);
   }
+}async function aiParse(request: Request, env: Env): Promise<Response> {
+  const { prompt } = await readJson<{ prompt: string }>(request);
+  const categories = await all(env, "SELECT id, name, slug FROM categories ORDER BY sort_order");
+  const ai = await env.AI.run(CHAT_MODEL, {
+    messages: [
+      {
+        role: "system",
+        content: [
+          "你是 37° Nav 的导航整理助手。",
+          "必须直接输出纯 JSON 对象，绝对不要使用 Markdown 代码块包围，不要输出任何废话。",
+          "需要输出的字段: title, url, description, category_slug, tags(数组), icon(一个emoji)。"
+        ].join("\n")
+      },
+      { role: "user", content: JSON.stringify({ prompt, categories }) }
+    ]
+  });
+  return json({ parsed: parseAiJson(ai) });
 }

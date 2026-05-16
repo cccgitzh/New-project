@@ -54,23 +54,70 @@ function renderCategories() {
   }, {});
   const rows = [{ id: "all", name: "全部", count: state.sites.length }, ...state.categories.map((cat) => ({
     id: cat.id,
-    name: `${cat.icon || "·"} ${cat.name}`,
+    name: `${cat.icon || ""} ${cat.name}`.trim(),
     count: counts[cat.id] || 0
   }))];
-  
+
   const categoryListEl = $("#categoryList");
   if (!categoryListEl) return;
-  
+
   categoryListEl.innerHTML = rows.map((cat) => `
-    <button class="category ${state.selectedCategory === cat.id ? "active" : ""}" data-cat="${cat.id}">
-      <span>${cat.name}</span><span>${cat.count}</span>
-    </button>
+    <div class="category ${state.selectedCategory === cat.id ? "active" : ""}" 
+         data-cat="${cat.id}" 
+         ${isAdminPage && cat.id !== 'all' ? `draggable="true" data-cat-drag="${cat.id}"` : ''}>
+      <span>${escapeHtml(cat.name)}</span>
+      <div class="cat-right">
+        ${isAdminPage && cat.id !== 'all' ? `
+          <div class="cat-actions">
+            <button type="button" class="edit-cat" data-id="${cat.id}" title="编辑">✎</button>
+            <button type="button" class="delete-cat" data-id="${cat.id}" title="删除">×</button>
+          </div>
+        ` : ''}
+        <span>${cat.count}</span>
+      </div>
+    </div>
   `).join("");
-  document.querySelectorAll("[data-cat]").forEach((btn) => {
-    btn.onclick = () => {
+
+  document.querySelectorAll(".category").forEach((btn) => {
+    btn.onclick = (e) => {
+      if (e.target.closest('.cat-actions')) return; // 点操作按钮时不切换分类
       state.selectedCategory = btn.dataset.cat;
       renderSites(state.sites);
       renderCategories();
+    };
+  });
+
+  if (isAdminPage) {
+    document.querySelectorAll(".edit-cat").forEach(btn => {
+      btn.onclick = () => openCategoryDialog(state.categories.find(c => c.id === btn.dataset.id));
+    });
+    document.querySelectorAll(".delete-cat").forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm("确定删除此分类吗？该分类下的站点将被标记为未分类。")) return;
+        await api(`/api/categories/${btn.dataset.id}`, { method: "DELETE" });
+        await refresh();
+      };
+    });
+    wireCategoryDragSort(); // 激活拖拽排序
+  }
+}
+
+// 新增分类拖拽排序功能
+function wireCategoryDragSort() {
+  let sourceId = null;
+  document.querySelectorAll(".category[data-cat-drag]").forEach((item) => {
+    item.ondragstart = () => { sourceId = item.dataset.catDrag; };
+    item.ondragover = (e) => e.preventDefault();
+    item.ondrop = async () => {
+      if (!sourceId || sourceId === item.dataset.catDrag) return;
+      const ids = [...document.querySelectorAll(".category[data-cat-drag]")].map((n) => n.dataset.catDrag);
+      const from = ids.indexOf(sourceId);
+      const to = ids.indexOf(item.dataset.catDrag);
+      ids.splice(to, 0, ids.splice(from, 1)[0]);
+      await Promise.all(ids.map((id, index) => api(`/api/categories/${id}`, {
+        method: "PUT", body: JSON.stringify({ sort_order: index * 10 })
+      })));
+      await refresh();
     };
   });
 }
@@ -179,6 +226,19 @@ function fillCategorySelect() {
     .join("");
 }
 
+let editingCategory = null;
+
+function openCategoryDialog(cat = null) {
+  if (!isAdminPage) return;
+  editingCategory = cat;
+  const form = $("#categoryDialog form");
+  $("#catDialogTitle").textContent = cat ? "编辑分类" : "新建分类";
+  form.name.value = cat?.name || "";
+  form.icon.value = cat?.icon || "";
+  form.slug.value = cat?.slug || "";
+  $("#categoryDialog").showModal();
+}
+
 function openSiteDialog(site = null) {
   if (!isAdminPage) return;
   state.editingSite = site;
@@ -189,6 +249,23 @@ function openSiteDialog(site = null) {
   form.description.value = site?.description || "";
   form.tags_text.value = site?.tags_text || "";
   form.category_id.value = site?.category_id || "";
+  form.icon.value = site?.icon || "";
+  $("#aiParseInput").value = ""; // 每次打开清空AI框
+
+  // 删除按钮逻辑
+  const delBtn = $("#deleteSiteBtn");
+  if (site) {
+    delBtn.style.display = "block";
+    delBtn.onclick = async () => {
+      if (!confirm(`警告：确定要永久删除 [ ${site.title} ] 吗？`)) return;
+      await api(`/api/sites/${site.id}`, { method: "DELETE" });
+      $("#siteDialog").close();
+      await refresh();
+    };
+  } else {
+    delBtn.style.display = "none";
+  }
+
   $("#siteDialog").showModal();
 }
 
@@ -243,6 +320,59 @@ if (semanticBtn) {
 }
 
 if (isAdminPage) {
+  // 绑定分类相关的弹窗按钮
+  const addCatBtn = $("#addCatBtn");
+  if (addCatBtn) addCatBtn.onclick = () => openCategoryDialog();
+  const cancelCatBtn = $("#cancelCatBtn");
+  if (cancelCatBtn) cancelCatBtn.onclick = () => $("#categoryDialog").close();
+
+  const catForm = $("#categoryDialog form");
+  if (catForm) {
+    catForm.onsubmit = async (event) => {
+      event.preventDefault();
+      const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
+      const path = editingCategory ? `/api/categories/${editingCategory.id}` : "/api/categories";
+      const method = editingCategory ? "PUT" : "POST";
+      await api(path, { method, body: JSON.stringify(payload) });
+      $("#categoryDialog").close();
+      await refresh();
+    };
+  }
+
+  // 绑定 AI 智能填表按钮
+  const aiParseBtn = $("#aiParseBtn");
+  if (aiParseBtn) {
+    aiParseBtn.onclick = async () => {
+      const prompt = $("#aiParseInput").value.trim();
+      if (!prompt) return alert("请在输入框内粘贴网址或介绍文字");
+
+      const originalText = aiParseBtn.textContent;
+      aiParseBtn.textContent = "AI 解析中...";
+      aiParseBtn.disabled = true;
+
+      try {
+        const result = await api("/api/ai/parse", { method: "POST", body: JSON.stringify({ prompt }) });
+        const p = result.parsed || {};
+        const form = $("#siteDialog form");
+
+        if (p.title) form.title.value = p.title;
+        if (p.url) form.url.value = p.url;
+        if (p.description) form.description.value = p.description;
+        if (p.icon) form.icon.value = p.icon;
+        if (p.tags && Array.isArray(p.tags)) form.tags_text.value = p.tags.join(", ");
+        if (p.category_slug) {
+          const cat = state.categories.find(c => c.slug === p.category_slug);
+          if (cat) form.category_id.value = cat.id;
+        }
+      } catch (e) {
+        console.error(e);
+        alert("AI 识别失败，请检查网址是否可达或稍后再试");
+      } finally {
+        aiParseBtn.textContent = originalText;
+        aiParseBtn.disabled = false;
+      }
+    };
+  }
   const newSiteBtn = $("#newSiteBtn");
   if (newSiteBtn) newSiteBtn.onclick = () => openSiteDialog();
   

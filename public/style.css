@@ -197,15 +197,59 @@ input:focus, textarea:focus { border-color: var(--cyan-neon); outline: none; bac
 .edit-btn { background: transparent; color: var(--text-muted); font-size: 14px; }
 .edit-btn:hover { color: var(--magenta-neon); }
 
-/* 对话框 HUD 化 */
-dialog { width: min(540px, calc(100vw - 32px)); border: 1px solid var(--cyan-neon); background: rgba(2, 6, 23, 0.95); backdrop-filter: blur(10px); color: var(--text-main); box-shadow: 0 0 50px rgba(0, 243, 255, 0.1); padding: 32px; border-radius: 8px; }
-dialog::backdrop { background: rgba(0, 0, 0, 0.8); }
-.dialog-form { display: grid; gap: 20px; }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px; }
-
-@media (max-width: 1024px) {
-  .shell { grid-template-columns: 1fr; }
-  .rail { position: relative; height: auto; border-right: none; border-bottom: 1px solid var(--glass-border); padding: 20px; z-index: 1;}
-  .main { padding: 30px 20px; }
-  .command { flex-direction: column; }
+/* ================== 弹窗 HUD 深度美化 ================== */
+dialog {
+  width: min(640px, calc(100vw - 32px));
+  border: 1px solid var(--cyan-neon);
+  background: rgba(2, 6, 23, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  color: var(--text-main);
+  box-shadow: 0 0 50px rgba(0, 243, 255, 0.15), inset 0 0 20px rgba(0, 243, 255, 0.05);
+  padding: 0;
+  border-radius: 12px;
+  overflow: hidden;
 }
+dialog::backdrop { background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); }
+
+.hud-header {
+  background: rgba(0, 243, 255, 0.05);
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(0, 243, 255, 0.3);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.hud-header h2 {
+  margin: 0; font-size: 16px; font-family: var(--font-mono); color: var(--cyan-neon); text-transform: uppercase; letter-spacing: 2px;
+}
+.hud-body { padding: 24px; display: grid; gap: 20px; }
+
+/* 危险删除按钮 */
+.danger-btn {
+  background: rgba(255, 0, 85, 0.1); color: #ff0055; border: 1px solid #ff0055;
+  padding: 6px 12px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; transition: 0.3s;
+}
+.danger-btn:hover { background: #ff0055; color: #fff; box-shadow: 0 0 15px #ff0055; }
+
+/* AI 识别专属输入框 */
+.ai-parse-box {
+  display: flex; gap: 12px; background: rgba(0, 0, 0, 0.4); padding: 12px 16px; 
+  border-radius: 6px; border: 1px dashed var(--magenta-neon); align-items: center;
+}
+.ai-parse-box input { border-color: transparent; background: transparent; padding: 0; }
+.ai-parse-box input:focus { box-shadow: none; }
+.ai-parse-box button { white-space: nowrap; border-color: var(--magenta-neon); color: var(--magenta-neon); }
+.ai-parse-box button:hover { background: var(--magenta-neon); color: #fff; box-shadow: 0 0 15px var(--magenta-neon); }
+
+.hud-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 600px) { .hud-grid { grid-template-columns: 1fr; } }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 16px; margin-top: 10px; }
+
+/* ================== 分类管理动态样式 ================== */
+.category { position: relative; cursor: pointer; }
+.cat-right { display: flex; align-items: center; gap: 8px; }
+.cat-actions { display: none; gap: 4px; }
+.category:hover .cat-actions { display: flex; }
+.cat-actions button { background: none; border: none; color: var(--text-muted); padding: 4px; font-size: 14px; transition: 0.2s; }
+.cat-actions .delete-cat:hover { color: #ff0055; transform: scale(1.2); }
+.cat-actions .edit-cat:hover { color: var(--cyan-neon); transform: scale(1.2); }
+.add-cat-btn { margin-top: 16px; width: 100%; justify-content: center; border-style: dashed; }
