@@ -1,5 +1,6 @@
 const config = window.__NAV_CONFIG__ || {};
 const apiBase = (config.apiBase || "").replace(/\/$/, "");
+const isAdminPage = window.location.pathname.includes('admin');
 
 const state = {
   categories: [],
@@ -22,6 +23,7 @@ const api = async (path, options = {}) => {
 
 const setStatus = (text, ok = true) => {
   const el = $("#syncStatus");
+  if (!el) return;
   el.textContent = text;
   el.style.color = ok ? "var(--ok)" : "var(--bad)";
 };
@@ -42,7 +44,7 @@ function render() {
   renderCategories();
   renderSites(state.sites);
   renderWidgets();
-  fillCategorySelect();
+  if (isAdminPage) fillCategorySelect();
 }
 
 function renderCategories() {
@@ -55,7 +57,11 @@ function renderCategories() {
     name: `${cat.icon || "·"} ${cat.name}`,
     count: counts[cat.id] || 0
   }))];
-  $("#categoryList").innerHTML = rows.map((cat) => `
+  
+  const categoryListEl = $("#categoryList");
+  if (!categoryListEl) return;
+  
+  categoryListEl.innerHTML = rows.map((cat) => `
     <button class="category ${state.selectedCategory === cat.id ? "active" : ""}" data-cat="${cat.id}">
       <span>${cat.name}</span><span>${cat.count}</span>
     </button>
@@ -74,16 +80,19 @@ function renderSites(sites) {
     ? sites
     : sites.filter((site) => site.category_id === state.selectedCategory);
 
-  $("#sitesGrid").innerHTML = filtered.map((site) => {
+  const sitesGridEl = $("#sitesGrid");
+  if (!sitesGridEl) return;
+
+  sitesGridEl.innerHTML = filtered.map((site) => {
     const healthClass = site.health_status === "ok" ? "health-ok" : site.health_status === "down" ? "health-bad" : "";
     const tags = (site.tags_text || "").split(",").map((tag) => tag.trim()).filter(Boolean);
     return `
-      <article class="site-card" draggable="true" data-site="${site.id}">
+      <article class="site-card" draggable="${isAdminPage ? 'true' : 'false'}" data-site="${site.id}">
         <div class="site-top">
           <a href="${escapeAttr(site.url)}" target="_blank" rel="noreferrer" data-visit="${site.id}">
             ${site.icon || "↗"} ${escapeHtml(site.title)}
           </a>
-          <button class="ghost" data-edit="${site.id}" title="编辑">编辑</button>
+          ${isAdminPage ? `<button class="ghost" data-edit="${site.id}" title="编辑">编辑</button>` : ''}
         </div>
         <p>${escapeHtml(site.description || "无备注")}</p>
         <div class="meta">
@@ -101,12 +110,17 @@ function renderSites(sites) {
   document.querySelectorAll("[data-edit]").forEach((btn) => {
     btn.onclick = () => openSiteDialog(state.sites.find((site) => site.id === btn.dataset.edit));
   });
-  wireDragSort();
+  if (isAdminPage) {
+    wireDragSort();
+  }
 }
 
 function renderWidgets() {
   const health = state.health || {};
-  $("#widgetList").innerHTML = `
+  const widgetListEl = $("#widgetList");
+  if (!widgetListEl) return;
+  
+  widgetListEl.innerHTML = `
     <section class="widget">
       <strong>健康快照</strong>
       <p class="tagline">OK ${health.ok || 0} · Down ${health.down || 0} · Unknown ${health.unknown || 0}</p>
@@ -115,7 +129,7 @@ function renderWidgets() {
       <strong>待办清单</strong>
       <div id="todoList">${state.todos.map((todo) => `
         <label class="todo-row">
-          <input type="checkbox" data-todo="${todo.id}" ${todo.done ? "checked" : ""} />
+          <input type="checkbox" data-todo="${todo.id}" ${todo.done ? "checked" : ""} ${isAdminPage ? "" : "disabled"} />
           <span>${escapeHtml(todo.title)}</span>
         </label>
       `).join("") || `<p class="tagline">今天很清爽，没有待办。</p>`}</div>
@@ -125,25 +139,29 @@ function renderWidgets() {
       <p class="tagline">wrangler deploy --config wrangler.toml</p>
     </section>
   `;
-  document.querySelectorAll("[data-todo]").forEach((box) => {
-    box.onchange = async () => {
-      await api(`/api/todos/${box.dataset.todo}`, {
-        method: "PUT",
-        body: JSON.stringify({ done: box.checked ? 1 : 0 })
-      });
-      await refresh();
-    };
-  });
+  if (isAdminPage) {
+    document.querySelectorAll("[data-todo]").forEach((box) => {
+      box.onchange = async () => {
+        await api(`/api/todos/${box.dataset.todo}`, {
+          method: "PUT",
+          body: JSON.stringify({ done: box.checked ? 1 : 0 })
+        });
+        await refresh();
+      };
+    });
+  }
 }
 
 function fillCategorySelect() {
   const select = $("#siteDialog select[name='category_id']");
+  if (!select) return;
   select.innerHTML = `<option value="">未分类</option>` + state.categories
     .map((cat) => `<option value="${cat.id}">${escapeHtml(cat.name)}</option>`)
     .join("");
 }
 
 function openSiteDialog(site = null) {
+  if (!isAdminPage) return;
   state.editingSite = site;
   const form = $("#siteDialog form");
   $("#dialogTitle").textContent = site ? "编辑站点" : "新增站点";
@@ -183,77 +201,107 @@ function wireDragSort() {
   });
 }
 
-$("#searchInput").addEventListener("input", debounce(async (event) => {
-  const q = event.target.value.trim();
-  if (!q) return renderSites(state.sites);
-  const result = await api(`/api/search?q=${encodeURIComponent(q)}`);
-  renderSites(result.sites);
-}, 160));
+const searchInput = $("#searchInput");
+if (searchInput) {
+  searchInput.addEventListener("input", debounce(async (event) => {
+    const q = event.target.value.trim();
+    if (!q) return renderSites(state.sites);
+    const result = await api(`/api/search?q=${encodeURIComponent(q)}`);
+    renderSites(result.sites);
+  }, 160));
+}
 
-$("#semanticBtn").onclick = async () => {
-  const q = $("#searchInput").value.trim();
-  if (!q) return;
-  setStatus("Workers AI 检索中");
-  const result = await api(`/api/search?q=${encodeURIComponent(q)}&semantic=1`);
-  renderSites(result.sites);
-  setStatus("语义搜索完成");
-};
+const semanticBtn = $("#semanticBtn");
+if (semanticBtn) {
+  semanticBtn.onclick = async () => {
+    const q = $("#searchInput").value.trim();
+    if (!q) return;
+    setStatus("Workers AI 检索中");
+    const result = await api(`/api/search?q=${encodeURIComponent(q)}&semantic=1`);
+    renderSites(result.sites);
+    setStatus("语义搜索完成");
+  };
+}
 
-$("#newSiteBtn").onclick = () => openSiteDialog();
-$("#cancelSiteBtn").onclick = () => $("#siteDialog").close();
-$("#siteDialog form").onsubmit = async (event) => {
-  event.preventDefault();
-  const form = new FormData(event.currentTarget);
-  const payload = Object.fromEntries(form.entries());
-  const path = state.editingSite ? `/api/sites/${state.editingSite.id}` : "/api/sites";
-  const method = state.editingSite ? "PUT" : "POST";
-  await api(path, { method, body: JSON.stringify(payload) });
-  $("#siteDialog").close();
-  await refresh();
-};
+if (isAdminPage) {
+  const newSiteBtn = $("#newSiteBtn");
+  if (newSiteBtn) newSiteBtn.onclick = () => openSiteDialog();
+  
+  const cancelSiteBtn = $("#cancelSiteBtn");
+  if (cancelSiteBtn) cancelSiteBtn.onclick = () => $("#siteDialog").close();
+  
+  const siteDialogForm = $("#siteDialog form");
+  if (siteDialogForm) {
+    siteDialogForm.onsubmit = async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const payload = Object.fromEntries(form.entries());
+      const path = state.editingSite ? `/api/sites/${state.editingSite.id}` : "/api/sites";
+      const method = state.editingSite ? "PUT" : "POST";
+      await api(path, { method, body: JSON.stringify(payload) });
+      $("#siteDialog").close();
+      await refresh();
+    };
+  }
 
-$("#aiAddBtn").onclick = async () => {
-  const prompt = $("#aiInput").value.trim();
-  if (!prompt) return;
-  setStatus("AI 正在整理站点");
-  await api("/api/ai/add-site", { method: "POST", body: JSON.stringify({ prompt }) });
-  $("#aiInput").value = "";
-  await refresh();
-  setStatus("AI 入库完成");
-};
+  const aiAddBtn = $("#aiAddBtn");
+  if (aiAddBtn) {
+    aiAddBtn.onclick = async () => {
+      const prompt = $("#aiInput").value.trim();
+      if (!prompt) return;
+      setStatus("AI 正在整理站点");
+      await api("/api/ai/add-site", { method: "POST", body: JSON.stringify({ prompt }) });
+      $("#aiInput").value = "";
+      await refresh();
+      setStatus("AI 入库完成");
+    };
+  }
 
-$("#healthBtn").onclick = async () => {
-  setStatus("巡检中");
-  await api("/api/health-check/run", { method: "POST" });
-  await refresh();
-  setStatus("巡检完成");
-};
+  const healthBtn = $("#healthBtn");
+  if (healthBtn) {
+    healthBtn.onclick = async () => {
+      setStatus("巡检中");
+      await api("/api/health-check/run", { method: "POST" });
+      await refresh();
+      setStatus("巡检完成");
+    };
+  }
 
-$("#addTodoBtn").onclick = async () => {
-  const title = prompt("新增待办");
-  if (!title) return;
-  await api("/api/todos", { method: "POST", body: JSON.stringify({ title }) });
-  await refresh();
-};
+  const addTodoBtn = $("#addTodoBtn");
+  if (addTodoBtn) {
+    addTodoBtn.onclick = async () => {
+      const title = prompt("新增待办");
+      if (!title) return;
+      await api("/api/todos", { method: "POST", body: JSON.stringify({ title }) });
+      await refresh();
+    };
+  }
 
-$("#exportBtn").onclick = async () => {
-  const data = await api("/api/export");
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `37-nav-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-};
+  const exportBtn = $("#exportBtn");
+  if (exportBtn) {
+    exportBtn.onclick = async () => {
+      const data = await api("/api/export");
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `37-nav-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+  }
 
-$("#importFile").onchange = async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-  const data = JSON.parse(await file.text());
-  await api("/api/import", { method: "POST", body: JSON.stringify(data) });
-  await refresh();
-};
+  const importFile = $("#importFile");
+  if (importFile) {
+    importFile.onchange = async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const data = JSON.parse(await file.text());
+      await api("/api/import", { method: "POST", body: JSON.stringify(data) });
+      await refresh();
+    };
+  }
+}
 
 function debounce(fn, wait) {
   let timer;
