@@ -282,12 +282,8 @@ async function aiAddSite(request: Request, env: Env, ctx: ExecutionContext): Pro
           "优先复用已有分类 slug。"
         ].join("\n")
       },
-      {
-        role: "user",
-        content: JSON.stringify({ prompt, categories })
-      }
-    ],
-    response_format: { type: "json_object" }
+      { role: "user", content: JSON.stringify({ prompt, categories }) }
+    ]
   });
   const parsed = parseAiJson(ai);
   const category = categories.find((cat) => String(cat.slug) === String(parsed.category_slug));
@@ -313,8 +309,7 @@ async function aiOrganize(env: Env): Promise<Response> {
     messages: [
       { role: "system", content: "你是导航信息架构专家。只输出 JSON: {suggestions:[{site_id,category_slug,tags,reason}]}" },
       { role: "user", content: JSON.stringify({ sites, categories }) }
-    ],
-    response_format: { type: "json_object" }
+    ]
   });
   return json({ suggestions: parseAiJson(ai).suggestions || [] });
 }
