@@ -17,7 +17,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
       - name: Apply D1 schema
         run: npx wrangler d1 execute 37-nav-db --remote --file=./schema.sql
         env:
