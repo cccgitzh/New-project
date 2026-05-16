@@ -703,11 +703,15 @@ function slugify(value: string): string {
 }
 
 function parseAiJson(result: unknown): Record<string, unknown> {
-  const content = typeof result === "object" && result && "response" in result
+  let content = typeof result === "object" && result && "response" in result
     ? String((result as { response: unknown }).response)
     : typeof result === "object" && result && "choices" in result
       ? String((result as { choices: { message?: { content?: string } }[] }).choices?.[0]?.message?.content || "{}")
       : JSON.stringify(result || {});
+  
+  // 【新增过滤】暴力清除 AI 爱乱加的 Markdown 代码块干扰
+  content = content.replace(/```json/gi, "").replace(/```/g, "").trim();
+  
   try {
     return JSON.parse(content);
   } catch {
