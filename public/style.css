@@ -30,7 +30,6 @@ button, input, textarea, select { font: inherit; }
 button { cursor: pointer; border: none; outline: none; }
 a { color: var(--text-main); text-decoration: none; transition: 0.3s ease; }
 
-/* 侧边栏与主区比例重构：让主区更开阔 */
 .shell {
   display: grid;
   grid-template-columns: 260px 1fr;
@@ -90,6 +89,8 @@ a { color: var(--text-main); text-decoration: none; transition: 0.3s ease; }
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 1px;
+  position: relative;
+  cursor: pointer;
 }
 .category:hover { background: rgba(0, 243, 255, 0.05); color: var(--text-main); }
 .category.active {
@@ -97,6 +98,14 @@ a { color: var(--text-main); text-decoration: none; transition: 0.3s ease; }
   color: var(--cyan-neon);
   border-left: 3px solid var(--cyan-neon);
 }
+
+.cat-right { display: flex; align-items: center; gap: 8px; }
+.cat-actions { display: none; gap: 4px; }
+.category:hover .cat-actions { display: flex; }
+.cat-actions button { background: none; border: none; color: var(--text-muted); padding: 4px; font-size: 14px; transition: 0.2s; }
+.cat-actions .delete-cat:hover { color: #ff0055; transform: scale(1.2); }
+.cat-actions .edit-cat:hover { color: var(--cyan-neon); transform: scale(1.2); }
+.add-cat-btn { margin-top: 16px; width: 100%; justify-content: center; border-style: dashed; }
 
 .ghost, .primary {
   border-radius: 4px;
@@ -123,7 +132,6 @@ input, textarea, select {
 }
 input:focus, textarea:focus { border-color: var(--cyan-neon); outline: none; background: rgba(0, 243, 255, 0.05); }
 
-/* 主区域：视野全开 */
 .main { padding: 50px 6vw; }
 
 .hero { padding-bottom: 40px; display: flex; justify-content: space-between; align-items: flex-end; }
@@ -131,19 +139,16 @@ input:focus, textarea:focus { border-color: var(--cyan-neon); outline: none; bac
 .highlight { color: var(--cyan-neon); }
 .brand-text { color: var(--magenta-neon); }
 .slogan { color: var(--text-muted); font-family: var(--font-mono); font-size: 13px; margin: 0; }
-.status-pill { border: 1px solid rgba(0, 255, 136, 0.4); padding: 6px 12px; color: #00ff88; font-family: var(--font-mono); font-size: 12px; background: rgba(0, 255, 136, 0.05); }
+.status-pill { border: 1px solid rgba(0, 255, 136, 0.4); padding: 6px 12px; color: #00ff88; font-family: var(--font-mono); font-size: 12px; background: rgba(0, 255, 136, 0.05); border-radius: 99px; }
 
 .command { display: flex; gap: 16px; margin-bottom: 40px; }
 
-/* 解除原本的网格限制，让卡片占据全屏宽度 */
 .grid { display: block; }
 .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 16px; }
 .panel-head h2 { margin: 0; font-size: 16px; font-weight: normal; font-family: var(--font-mono); color: var(--text-main); letter-spacing: 2px;}
 
-/* 重新排布的高级数据块卡片 */
 .sites-grid {
   display: grid;
-  /* 卡片宽度加大，排列更舒展 */
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 24px;
 }
@@ -158,7 +163,6 @@ input:focus, textarea:focus { border-color: var(--cyan-neon); outline: none; bac
   display: flex;
   flex-direction: column;
   gap: 16px;
-  /* 扫描线效果的底图 */
   background-image: linear-gradient(180deg, transparent 50%, rgba(0, 243, 255, 0.02) 50%);
   background-size: 100% 4px;
 }
@@ -193,15 +197,17 @@ input:focus, textarea:focus { border-color: var(--cyan-neon); outline: none; bac
 .site-card:hover .tag { background: rgba(0, 243, 255, 0.1); color: var(--cyan-neon); }
 
 .meta { color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; }
+.health-ok { color: #00ff88; }
+.health-bad { color: #ff0055; }
 
 .edit-btn { background: transparent; color: var(--text-muted); font-size: 14px; }
 .edit-btn:hover { color: var(--magenta-neon); }
 
-/* ================== 弹窗 HUD 深度美化 ================== */
+/* HUD 弹窗增强 */
 dialog {
   width: min(640px, calc(100vw - 32px));
   border: 1px solid var(--cyan-neon);
-  background: rgba(2, 6, 23, 0.85);
+  background: rgba(2, 6, 23, 0.95);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   color: var(--text-main);
@@ -223,14 +229,12 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); 
 }
 .hud-body { padding: 24px; display: grid; gap: 20px; }
 
-/* 危险删除按钮 */
 .danger-btn {
   background: rgba(255, 0, 85, 0.1); color: #ff0055; border: 1px solid #ff0055;
   padding: 6px 12px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; transition: 0.3s;
 }
 .danger-btn:hover { background: #ff0055; color: #fff; box-shadow: 0 0 15px #ff0055; }
 
-/* AI 识别专属输入框 */
 .ai-parse-box {
   display: flex; gap: 12px; background: rgba(0, 0, 0, 0.4); padding: 12px 16px; 
   border-radius: 6px; border: 1px dashed var(--magenta-neon); align-items: center;
@@ -244,12 +248,9 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); 
 @media (max-width: 600px) { .hud-grid { grid-template-columns: 1fr; } }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 16px; margin-top: 10px; }
 
-/* ================== 分类管理动态样式 ================== */
-.category { position: relative; cursor: pointer; }
-.cat-right { display: flex; align-items: center; gap: 8px; }
-.cat-actions { display: none; gap: 4px; }
-.category:hover .cat-actions { display: flex; }
-.cat-actions button { background: none; border: none; color: var(--text-muted); padding: 4px; font-size: 14px; transition: 0.2s; }
-.cat-actions .delete-cat:hover { color: #ff0055; transform: scale(1.2); }
-.cat-actions .edit-cat:hover { color: var(--cyan-neon); transform: scale(1.2); }
-.add-cat-btn { margin-top: 16px; width: 100%; justify-content: center; border-style: dashed; }
+@media (max-width: 1024px) {
+  .shell { grid-template-columns: 1fr; }
+  .rail { position: relative; height: auto; border-right: none; border-bottom: 1px solid var(--glass-border); padding: 20px; z-index: 1;}
+  .main { padding: 30px 20px; }
+  .command { flex-direction: column; }
+}

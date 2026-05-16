@@ -1,116 +1,95 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
-    <title>37° Nav - 管理后台</title>
-    <link rel="stylesheet" href="./style.css" />
-  </head>
-  <body>
-    <div class="shell">
-      <aside class="rail">
-        <div class="brand">
-          <span class="brand-mark">37°</span>
-          <div>
-            <strong>37° Nav</strong>
-            <small>管理后台</small>
-          </div>
+<head>
+  <meta charset="UTF-8">
+  <title>37° Nav - 星际指挥中心 (管理后台)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail">
+      <div class="brand">
+        <div class="brand-mark">37°</div>
+        <div>
+          <strong>37° Nav</strong>
+          <small>管理后台</small>
         </div>
-        <nav id="categoryList" class="category-list" aria-label="分类"></nav>
-        <button id="addCatBtn" class="ghost add-cat-btn">+ 新建分类</button>
-        <button id="exportBtn" class="ghost">导出备份</button>
-        <label class="ghost file-label">
-          导入备份
-          <input id="importFile" type="file" accept="application/json" hidden />
-        </label>
-      </aside>
+      </div>
+      <nav id="categoryList" class="category-list"></nav>
+      <button id="addCatBtn" class="ghost add-cat-btn">+ 新建分类</button>
+    </aside>
 
-      <main class="main">
-        <header class="hero">
-          <div>
-            <h1>Welcome to <br><span class="highlight">37°</span> <span class="brand-text">Nav</span></h1>
-            <p class="slogan">你的恒温个人数字入口，边缘原生，零维护永在线。</p>
+    <main class="main">
+      <header class="hero">
+        <div>
+          <h1>Welcome to <br><span class="highlight">37°</span> <span class="brand-text">Nav</span></h1>
+          <p class="slogan">你的恒温个人数字入口，边缘原生，零维护永在线。</p>
+        </div>
+        <div class="status-pill" id="syncStatus">同步中</div>
+      </header>
+
+      <section class="command">
+        <input id="searchInput" placeholder="搜索站点，或输入指令..." />
+        <button id="searchBtn" class="primary">语义搜索</button>
+        <button id="addSiteBtn" class="ghost">新增站点</button>
+      </section>
+
+      <div class="grid">
+        <section class="panel sites">
+          <div class="panel-head">
+            <h2>导航矩阵</h2>
           </div>
-          <div class="status-pill" id="syncStatus">同步中</div>
-        </header>
-
-        <section class="command">
-          <input id="searchInput" placeholder="搜索站点，或输入：找能在线压缩图片的工具" autocomplete="off" />
-          <button id="semanticBtn" class="primary">语义搜索</button>
-          <button id="healthBtn" class="ghost">巡检</button>
+          <div id="sitesGrid" class="sites-grid"></div>
         </section>
+      </div>
+    </main>
+  </div>
 
-        <section class="ai-card">
-          <div>
-            <h2>自然语言添加站点</h2>
-            <p>示例：添加 https://squoosh.app 在线图片压缩工具，放到工具分类。</p>
-          </div>
-          <div class="ai-row">
-            <input id="aiInput" placeholder="输入 URL 与描述，让 Workers AI 自动分类、打标签" />
-            <button id="aiAddBtn" class="primary">AI 入库</button>
-          </div>
-        </section>
+  <dialog id="siteDialog">
+    <form method="dialog" class="dialog-form">
+      <div class="hud-header">
+        <h2 id="dialogTitle">新增站点</h2>
+        <button type="button" id="deleteSiteBtn" class="danger-btn" style="display:none;">删除此站点</button>
+      </div>
+      <div class="hud-body">
+        <div class="ai-parse-box">
+          <input id="aiParseInput" placeholder="在此粘贴网址或描述，AI 帮填表 ->" />
+          <button type="button" id="aiParseBtn" class="ghost">智能识别</button>
+        </div>
+        <div class="hud-grid">
+          <input name="title" placeholder="标题 (必填)" required />
+          <input name="url" placeholder="URL 链接 (必填)" required />
+          <input name="icon" placeholder="图标 (选填Emoji或图片链接)" />
+          <select name="category_id"></select>
+        </div>
+        <textarea name="description" placeholder="站点描述 (选填)"></textarea>
+        <input name="tags_text" placeholder="标签，用逗号分隔 (选填)" />
+        <div class="dialog-actions">
+          <button type="button" id="cancelSiteBtn" class="ghost">取消</button>
+          <button id="saveSiteBtn" value="default" class="primary">保存数据</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
 
-        <section class="grid">
-          <section class="panel sites-panel">
-            <div class="panel-head">
-              <h2>导航</h2>
-              <button id="newSiteBtn" class="ghost">新增站点</button>
-            </div>
-            <div id="sitesGrid" class="sites-grid"></div>
-          </section>
+  <dialog id="categoryDialog">
+    <form method="dialog" class="dialog-form">
+      <div class="hud-header">
+        <h2 id="catDialogTitle">新建分类</h2>
+      </div>
+      <div class="hud-body">
+        <input name="name" placeholder="分类名称 (必填，如：AI 工具)" required />
+        <input name="icon" placeholder="分类图标 (选填 Emoji，如：🤖)" />
+        <input name="slug" placeholder="英文标识 (选填，如 ai-tools)" />
+        <div class="dialog-actions">
+          <button type="button" id="cancelCatBtn" class="ghost">取消</button>
+          <button id="saveCatBtn" value="default" class="primary">保存分类</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
 
-          
-        </section>
-      </main>
-    </div>
-
-    <dialog id="siteDialog">
-   <form method="dialog" class="dialog-form">
-     <div class="hud-header">
-       <h2 id="dialogTitle">新增站点</h2>
-       <button type="button" id="deleteSiteBtn" class="danger-btn" style="display:none;">删除此站点</button>
-     </div>
-     <div class="hud-body">
-       <div class="ai-parse-box">
-         <input id="aiParseInput" placeholder="在此粘贴网址或描述，AI 帮你填表 ->" />
-         <button type="button" id="aiParseBtn" class="ghost">智能识别</button>
-       </div>
-       <div class="hud-grid">
-         <input name="title" placeholder="标题 (必填)" required />
-         <input name="url" placeholder="URL 链接 (必填)" required />
-         <input name="icon" placeholder="图标 (选填Emoji)" />
-         <select name="category_id"></select>
-       </div>
-       <textarea name="description" placeholder="站点描述 (选填)"></textarea>
-       <input name="tags_text" placeholder="标签，用逗号分隔 (选填)" />
-       <div class="dialog-actions">
-         <button type="button" id="cancelSiteBtn" class="ghost">取消</button>
-         <button id="saveSiteBtn" value="default" class="primary">保存数据</button>
-       </div>
-     </div>
-   </form>
- </dialog>
-
- <dialog id="categoryDialog">
-   <form method="dialog" class="dialog-form">
-     <div class="hud-header">
-       <h2 id="catDialogTitle">新建分类</h2>
-     </div>
-     <div class="hud-body">
-       <input name="name" placeholder="分类名称 (必填，如：AI 工具)" required />
-       <input name="icon" placeholder="分类图标 (选填 Emoji，如：🤖)" />
-       <input name="slug" placeholder="英文标识 (选填，如 ai-tools)" />
-       <div class="dialog-actions">
-         <button type="button" id="cancelCatBtn" class="ghost">取消</button>
-         <button id="saveCatBtn" value="default" class="primary">保存分类</button>
-       </div>
-     </div>
-   </form>
- </dialog>
-
-    <script src="./config.js"></script>
-    <script src="./app.js" type="module"></script>
-  </body>
+  <script src="app.js"></script>
+</body>
 </html>

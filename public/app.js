@@ -1,50 +1,69 @@
-const config = window.__NAV_CONFIG__ || {};
-const apiBase = (config.apiBase || "").replace(/\/$/, "");
-const isAdminPage = window.location.pathname.includes('admin');
-
+const isAdminPage = window.location.pathname.includes("admin.html");
 const state = {
-  categories: [],
   sites: [],
-  widgets: [],
-  todos: [],
+  categories: [],
   selectedCategory: "all",
-  editingSite: null
+  editingSite: null,
 };
 
-const $ = (selector) => document.querySelector(selector);
-const api = async (path, options = {}) => {
-  const res = await fetch(`${apiBase}${path}`, {
-    headers: { "content-type": "application/json", ...(options.headers || {}) },
-    ...options
-  });
-  if (!res.ok) throw new Error((await res.text()) || res.statusText);
-  return res.headers.get("content-type")?.includes("application/json") ? res.json() : res.text();
-};
+const $ = (sel) => document.querySelector(sel);
 
-const setStatus = (text, ok = true) => {
+function setStatus(msg, isError = false) {
   const el = $("#syncStatus");
   if (!el) return;
-  el.textContent = text;
-  el.style.color = ok ? "var(--ok)" : "var(--bad)";
-};
+  el.textContent = msg;
+  el.style.color = isError ? "#ff0055" : "#00ff88";
+  el.style.borderColor = isError ? "rgba(255, 0, 85, 0.4)" : "rgba(0, 255, 136, 0.4)";
+}
 
-async function boot() {
+function escapeHtml(unsafe) {
+  return (unsafe || "").toString()
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function escapeAttr(unsafe) {
+  return (unsafe || "").toString().replace(/"/g, "&quot;");
+}
+
+async function api(path, options = {}) {
+  setStatus("Syncing...");
   try {
-    const data = await api("/api/bootstrap");
-    Object.assign(state, data);
-    render();
-    setStatus("边缘已同步");
-  } catch (error) {
-    console.error(error);
-    setStatus("连接 Worker 失败", false);
+    const res = await fetch(path, options);
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    setStatus("System OK");
+    return data;
+  } catch (err) {
+    setStatus("Sync Error", true);
+    console.error(err);
+    throw err;
   }
 }
 
-function render() {
-  renderCategories();
-  renderSites(state.sites);
-  renderWidgets();
-  if (isAdminPage) fillCategorySelect();
+async function refresh() {
+  try {
+    const [sitesData, catsData] = await Promise.all([
+      api("/api/sites"),
+      api("/api/categories")
+    ]);
+    state.sites = sitesData.results || [];
+    state.categories = catsData.results || [];
+    
+    const catSelect = $("select[name='category_id']");
+    if (catSelect) {
+      catSelect.innerHTML = `<option value="">未分类</option>` + 
+        state.categories.map(c => `<option value="${c.id}">${c.icon || ''} ${escapeHtml(c.name)}</option>`).join("");
+    }
+    
+    renderCategories();
+    renderSites(state.sites);
+  } catch (e) {
+    console.error("加载数据失败", e);
+  }
 }
 
 function renderCategories() {
@@ -57,12 +76,12 @@ function renderCategories() {
     name: `${cat.icon || ""} ${cat.name}`.trim(),
     count: counts[cat.id] || 0
   }))];
-
+  
   const categoryListEl = $("#categoryList");
   if (!categoryListEl) return;
-
+  
   categoryListEl.innerHTML = rows.map((cat) => `
-    <div class="category ${state.selectedCategory === cat.id ? "active" : ""}" 
+    <div class="category ${String(state.selectedCategory) === String(cat.id) ? "active" : ""}" 
          data-cat="${cat.id}" 
          ${isAdminPage && cat.id !== 'all' ? `draggable="true" data-cat-drag="${cat.id}"` : ''}>
       <span>${escapeHtml(cat.name)}</span>
@@ -80,7 +99,7 @@ function renderCategories() {
 
   document.querySelectorAll(".category").forEach((btn) => {
     btn.onclick = (e) => {
-      if (e.target.closest('.cat-actions')) return; // 点操作按钮时不切换分类
+      if (e.target.closest('.cat-actions')) return; 
       state.selectedCategory = btn.dataset.cat;
       renderSites(state.sites);
       renderCategories();
@@ -89,20 +108,19 @@ function renderCategories() {
 
   if (isAdminPage) {
     document.querySelectorAll(".edit-cat").forEach(btn => {
-      btn.onclick = () => openCategoryDialog(state.categories.find(c => c.id === btn.dataset.id));
+      btn.onclick = () => openCategoryDialog(state.categories.find(c => String(c.id) === String(btn.dataset.id)));
     });
     document.querySelectorAll(".delete-cat").forEach(btn => {
       btn.onclick = async () => {
-        if (!confirm("确定删除此分类吗？该分类下的站点将被标记为未分类。")) return;
+        if (!confirm("确定删除此分类吗？该分类下的站点将被安全隔离为未分类。")) return;
         await api(`/api/categories/${btn.dataset.id}`, { method: "DELETE" });
         await refresh();
       };
     });
-    wireCategoryDragSort(); // 激活拖拽排序
+    wireCategoryDragSort();
   }
 }
 
-// 新增分类拖拽排序功能
 function wireCategoryDragSort() {
   let sourceId = null;
   document.querySelectorAll(".category[data-cat-drag]").forEach((item) => {
@@ -125,7 +143,7 @@ function wireCategoryDragSort() {
 function renderSites(sites) {
   const filtered = state.selectedCategory === "all"
     ? sites
-    : sites.filter((site) => site.category_id === state.selectedCategory);
+    : sites.filter((site) => String(site.category_id) === String(state.selectedCategory));
 
   const sitesGridEl = $("#sitesGrid");
   if (!sitesGridEl) return;
@@ -134,20 +152,15 @@ function renderSites(sites) {
     const healthClass = site.health_status === "ok" ? "health-ok" : site.health_status === "down" ? "health-bad" : "";
     const tags = (site.tags_text || "").split(",").map((tag) => tag.trim()).filter(Boolean);
     
-  // 【自动提取网址的域名】
     let domain = "";
     try { domain = new URL(site.url).hostname; } catch(e) {}
     
-    // 【图标生成逻辑升级：支持强制覆盖】
     let iconContent = "";
     if (site.icon && site.icon.startsWith("http")) {
-      // 优先级 1：如果你在图标框里填了具体的网络图片链接，直接强制使用！
       iconContent = `<img src="${escapeAttr(site.icon)}" alt="logo" style="width: 100%; height: 100%; border-radius: 8px; object-fit: contain;">`;
     } else if (domain) {
-      // 优先级 2：自动调用 Google API 抓取域名图标
       iconContent = `<img src="https://s2.googleusercontent.com/s2/favicons?domain=${domain}&sz=128" alt="logo" style="width: 100%; height: 100%; border-radius: 8px; object-fit: contain;" onerror="this.outerHTML='<span>${site.icon || '🧭'}</span>'">`;
     } else {
-      // 优先级 3：如果都没有，兜底显示 Emoji
       iconContent = `<span>${site.icon || "🧭"}</span>`;
     }
 
@@ -161,7 +174,7 @@ function renderSites(sites) {
             <a href="${escapeAttr(site.url)}" target="_blank" rel="noreferrer" data-visit="${site.id}">
               ${escapeHtml(site.title)}
             </a>
-            <div class="site-desc">${escapeHtml(site.description || "暂无描述")}</div>
+            <div class="site-desc">${escapeHtml(site.description || "AI 未能生成描述")}</div>
           </div>
           <div>
             ${isAdminPage ? `<button class="edit-btn" data-edit="${site.id}" title="编辑">✎</button>` : '<span class="arrow-icon">↗</span>'}
@@ -175,62 +188,19 @@ function renderSites(sites) {
         </div>
       </article>
     `;
-  }).join("") || `<p class="tagline">这里还没有站点。让 AI 先帮你塞一枚小火种。</p>`;
+  }).join("") || `<p class="tagline">矩阵暂无数据，请等待指挥官入库操作。</p>`;
 
   document.querySelectorAll("[data-visit]").forEach((link) => {
-    link.addEventListener("click", () => api(`/api/sites/${link.dataset.visit}/visit`, { method: "POST" }).catch(console.error));
+    link.addEventListener("click", () => {
+      api(`/api/sites/${link.dataset.visit}/visit`, { method: "POST" }).catch(()=>{});
+    });
   });
-  document.querySelectorAll("[data-edit]").forEach((btn) => {
-    btn.onclick = () => openSiteDialog(state.sites.find((site) => site.id === btn.dataset.edit));
-  });
-  if (isAdminPage) {
-    wireDragSort();
-  }
-}
 
-function renderWidgets() {
-  const health = state.health || {};
-  const widgetListEl = $("#widgetList");
-  if (!widgetListEl) return;
-  
-  widgetListEl.innerHTML = `
-    <section class="widget">
-      <strong>健康快照</strong>
-      <p class="tagline">OK ${health.ok || 0} · Down ${health.down || 0} · Unknown ${health.unknown || 0}</p>
-    </section>
-    <section class="widget">
-      <strong>待办清单</strong>
-      <div id="todoList">${state.todos.map((todo) => `
-        <label class="todo-row">
-          <input type="checkbox" data-todo="${todo.id}" ${todo.done ? "checked" : ""} ${isAdminPage ? "" : "disabled"} />
-          <span>${escapeHtml(todo.title)}</span>
-        </label>
-      `).join("") || `<p class="tagline">今天很清爽，没有待办。</p>`}</div>
-    </section>
-    <section class="widget">
-      <strong>快捷命令</strong>
-      <p class="tagline">wrangler deploy --config wrangler.toml</p>
-    </section>
-  `;
   if (isAdminPage) {
-    document.querySelectorAll("[data-todo]").forEach((box) => {
-      box.onchange = async () => {
-        await api(`/api/todos/${box.dataset.todo}`, {
-          method: "PUT",
-          body: JSON.stringify({ done: box.checked ? 1 : 0 })
-        });
-        await refresh();
-      };
+    document.querySelectorAll(".edit-btn").forEach((btn) => {
+      btn.onclick = () => openSiteDialog(state.sites.find((s) => String(s.id) === String(btn.dataset.edit)));
     });
   }
-}
-
-function fillCategorySelect() {
-  const select = $("#siteDialog select[name='category_id']");
-  if (!select) return;
-  select.innerHTML = `<option value="">未分类</option>` + state.categories
-    .map((cat) => `<option value="${cat.id}">${escapeHtml(cat.name)}</option>`)
-    .join("");
 }
 
 let editingCategory = null;
@@ -257,14 +227,13 @@ function openSiteDialog(site = null) {
   form.tags_text.value = site?.tags_text || "";
   form.category_id.value = site?.category_id || "";
   form.icon.value = site?.icon || "";
-  $("#aiParseInput").value = ""; // 每次打开清空AI框
-
-  // 删除按钮逻辑
+  $("#aiParseInput").value = ""; 
+  
   const delBtn = $("#deleteSiteBtn");
   if (site) {
     delBtn.style.display = "block";
     delBtn.onclick = async () => {
-      if (!confirm(`警告：确定要永久删除 [ ${site.title} ] 吗？`)) return;
+      if (!confirm(`警告：确定要永久抹除 [ ${site.title} ] 吗？该操作不可逆！`)) return;
       await api(`/api/sites/${site.id}`, { method: "DELETE" });
       $("#siteDialog").close();
       await refresh();
@@ -272,213 +241,96 @@ function openSiteDialog(site = null) {
   } else {
     delBtn.style.display = "none";
   }
-
+  
   $("#siteDialog").showModal();
 }
 
-async function refresh() {
-  const data = await api("/api/bootstrap");
-  Object.assign(state, data);
-  render();
-}
-
-function wireDragSort() {
-  let sourceId = null;
-  document.querySelectorAll(".site-card").forEach((card) => {
-    card.ondragstart = () => {
-      sourceId = card.dataset.site;
+window.onload = () => {
+  refresh();
+  
+  const searchInput = $("#searchInput");
+  const searchBtn = $("#searchBtn");
+  if (searchBtn && searchInput) {
+    searchBtn.onclick = async () => {
+      const q = searchInput.value.trim();
+      if (!q) return renderSites(state.sites);
+      const res = await api(`/api/search?q=${encodeURIComponent(q)}`);
+      renderSites(res.results || []);
     };
-    card.ondragover = (event) => event.preventDefault();
-    card.ondrop = async () => {
-      if (!sourceId || sourceId === card.dataset.site) return;
-      const ids = [...document.querySelectorAll(".site-card")].map((node) => node.dataset.site);
-      const from = ids.indexOf(sourceId);
-      const to = ids.indexOf(card.dataset.site);
-      ids.splice(to, 0, ids.splice(from, 1)[0]);
-      await Promise.all(ids.map((id, index) => api(`/api/sites/${id}`, {
-        method: "PUT",
-        body: JSON.stringify({ sort_order: index * 10 })
-      })));
-      await refresh();
-    };
-  });
-}
-
-const searchInput = $("#searchInput");
-if (searchInput) {
-  searchInput.addEventListener("input", debounce(async (event) => {
-    const q = event.target.value.trim();
-    if (!q) return renderSites(state.sites);
-    const result = await api(`/api/search?q=${encodeURIComponent(q)}`);
-    renderSites(result.sites);
-  }, 160));
-}
-
-const semanticBtn = $("#semanticBtn");
-if (semanticBtn) {
-  semanticBtn.onclick = async () => {
-    const q = $("#searchInput").value.trim();
-    if (!q) return;
-    setStatus("Workers AI 检索中");
-    const result = await api(`/api/search?q=${encodeURIComponent(q)}&semantic=1`);
-    renderSites(result.sites);
-    setStatus("语义搜索完成");
-  };
-}
-
-if (isAdminPage) {
-  // 绑定分类相关的弹窗按钮
-  const addCatBtn = $("#addCatBtn");
-  if (addCatBtn) addCatBtn.onclick = () => openCategoryDialog();
-  const cancelCatBtn = $("#cancelCatBtn");
-  if (cancelCatBtn) cancelCatBtn.onclick = () => $("#categoryDialog").close();
-
-  const catForm = $("#categoryDialog form");
-  if (catForm) {
-    catForm.onsubmit = async (event) => {
-      event.preventDefault();
-      const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
-      const path = editingCategory ? `/api/categories/${editingCategory.id}` : "/api/categories";
-      const method = editingCategory ? "PUT" : "POST";
-      await api(path, { method, body: JSON.stringify(payload) });
-      $("#categoryDialog").close();
-      await refresh();
+    searchInput.onkeyup = (e) => {
+      if (e.key === "Enter") searchBtn.click();
     };
   }
 
-  // 绑定 AI 智能填表按钮
-  const aiParseBtn = $("#aiParseBtn");
-  if (aiParseBtn) {
-    aiParseBtn.onclick = async () => {
-      const prompt = $("#aiParseInput").value.trim();
-      if (!prompt) return alert("请在输入框内粘贴网址或介绍文字");
+  if (isAdminPage) {
+    const addSiteBtn = $("#addSiteBtn");
+    if (addSiteBtn) addSiteBtn.onclick = () => openSiteDialog();
+    const cancelSiteBtn = $("#cancelSiteBtn");
+    if (cancelSiteBtn) cancelSiteBtn.onclick = () => $("#siteDialog").close();
 
-      const originalText = aiParseBtn.textContent;
-      aiParseBtn.textContent = "AI 解析中...";
-      aiParseBtn.disabled = true;
+    const siteForm = $("#siteDialog form");
+    if (siteForm) {
+      siteForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const payload = Object.fromEntries(new FormData(e.currentTarget).entries());
+        const path = state.editingSite ? `/api/sites/${state.editingSite.id}` : "/api/sites";
+        const method = state.editingSite ? "PUT" : "POST";
+        await api(path, { method, body: JSON.stringify(payload) });
+        $("#siteDialog").close();
+        await refresh();
+      };
+    }
 
-      try {
-        const result = await api("/api/ai/parse", { method: "POST", body: JSON.stringify({ prompt }) });
-        const p = result.parsed || {};
-        const form = $("#siteDialog form");
+    const addCatBtn = $("#addCatBtn");
+    if (addCatBtn) addCatBtn.onclick = () => openCategoryDialog();
+    const cancelCatBtn = $("#cancelCatBtn");
+    if (cancelCatBtn) cancelCatBtn.onclick = () => $("#categoryDialog").close();
+    
+    const catForm = $("#categoryDialog form");
+    if (catForm) {
+      catForm.onsubmit = async (event) => {
+        event.preventDefault();
+        const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
+        const path = editingCategory ? `/api/categories/${editingCategory.id}` : "/api/categories";
+        const method = editingCategory ? "PUT" : "POST";
+        await api(path, { method, body: JSON.stringify(payload) });
+        $("#categoryDialog").close();
+        await refresh();
+      };
+    }
 
-        if (p.title) form.title.value = p.title;
-        if (p.url) form.url.value = p.url;
-        if (p.description) form.description.value = p.description;
-        if (p.icon) form.icon.value = p.icon;
-        if (p.tags && Array.isArray(p.tags)) form.tags_text.value = p.tags.join(", ");
-        if (p.category_slug) {
-          const cat = state.categories.find(c => c.slug === p.category_slug);
-          if (cat) form.category_id.value = cat.id;
+    const aiParseBtn = $("#aiParseBtn");
+    if (aiParseBtn) {
+      aiParseBtn.onclick = async () => {
+        const prompt = $("#aiParseInput").value.trim();
+        if (!prompt) return alert("警告：空指令。请在输入框内粘贴网址或介绍文字。");
+        
+        const originalText = aiParseBtn.textContent;
+        aiParseBtn.textContent = "量子解析中...";
+        aiParseBtn.disabled = true;
+        
+        try {
+          const result = await api("/api/ai/parse", { method: "POST", body: JSON.stringify({ prompt }) });
+          const p = result.parsed || {};
+          const form = $("#siteDialog form");
+          
+          if (p.title) form.title.value = p.title;
+          if (p.url) form.url.value = p.url;
+          if (p.description) form.description.value = p.description;
+          if (p.icon) form.icon.value = p.icon;
+          if (p.tags && Array.isArray(p.tags)) form.tags_text.value = p.tags.join(", ");
+          if (p.category_slug) {
+            const cat = state.categories.find(c => c.slug === p.category_slug);
+            if (cat) form.category_id.value = cat.id;
+          }
+        } catch (e) {
+          console.error(e);
+          alert("AI 识别链路断开，请检查网址连通性或手动输入。");
+        } finally {
+          aiParseBtn.textContent = originalText;
+          aiParseBtn.disabled = false;
         }
-      } catch (e) {
-        console.error(e);
-        alert("AI 识别失败，请检查网址是否可达或稍后再试");
-      } finally {
-        aiParseBtn.textContent = originalText;
-        aiParseBtn.disabled = false;
-      }
-    };
+      };
+    }
   }
-  const newSiteBtn = $("#newSiteBtn");
-  if (newSiteBtn) newSiteBtn.onclick = () => openSiteDialog();
-  
-  const cancelSiteBtn = $("#cancelSiteBtn");
-  if (cancelSiteBtn) cancelSiteBtn.onclick = () => $("#siteDialog").close();
-  
-  const siteDialogForm = $("#siteDialog form");
-  if (siteDialogForm) {
-    siteDialogForm.onsubmit = async (event) => {
-      event.preventDefault();
-      const form = new FormData(event.currentTarget);
-      const payload = Object.fromEntries(form.entries());
-      const path = state.editingSite ? `/api/sites/${state.editingSite.id}` : "/api/sites";
-      const method = state.editingSite ? "PUT" : "POST";
-      await api(path, { method, body: JSON.stringify(payload) });
-      $("#siteDialog").close();
-      await refresh();
-    };
-  }
-
-  const aiAddBtn = $("#aiAddBtn");
-  if (aiAddBtn) {
-    aiAddBtn.onclick = async () => {
-      const prompt = $("#aiInput").value.trim();
-      if (!prompt) return;
-      setStatus("AI 正在整理站点");
-      await api("/api/ai/add-site", { method: "POST", body: JSON.stringify({ prompt }) });
-      $("#aiInput").value = "";
-      await refresh();
-      setStatus("AI 入库完成");
-    };
-  }
-
-  const healthBtn = $("#healthBtn");
-  if (healthBtn) {
-    healthBtn.onclick = async () => {
-      setStatus("巡检中");
-      await api("/api/health-check/run", { method: "POST" });
-      await refresh();
-      setStatus("巡检完成");
-    };
-  }
-
-  const addTodoBtn = $("#addTodoBtn");
-  if (addTodoBtn) {
-    addTodoBtn.onclick = async () => {
-      const title = prompt("新增待办");
-      if (!title) return;
-      await api("/api/todos", { method: "POST", body: JSON.stringify({ title }) });
-      await refresh();
-    };
-  }
-
-  const exportBtn = $("#exportBtn");
-  if (exportBtn) {
-    exportBtn.onclick = async () => {
-      const data = await api("/api/export");
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `37-nav-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    };
-  }
-
-  const importFile = $("#importFile");
-  if (importFile) {
-    importFile.onchange = async (event) => {
-      const file = event.target.files[0];
-      if (!file) return;
-      const data = JSON.parse(await file.text());
-      await api("/api/import", { method: "POST", body: JSON.stringify(data) });
-      await refresh();
-    };
-  }
-}
-
-function debounce(fn, wait) {
-  let timer;
-  return (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), wait);
-  };
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  })[char]);
-}
-
-function escapeAttr(value) {
-  return escapeHtml(value).replace(/`/g, "&#96;");
-}
-
-boot();
+};

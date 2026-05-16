@@ -2,16 +2,19 @@ export interface Env {
   NAV_KV: KVNamespace;
   NAV_DB: D1Database;
   NAV_VECTOR: VectorizeIndex;
-  AI: Ai;
+  AI: any;
   AUTH_MODE?: string;
   ADMIN_EMAILS?: string;
   CORS_ORIGIN?: string;
   HEALTH_CHECK_BATCH_SIZE?: string;
 }
 
+// ================= 类型定义区域（彻底消灭 GitHub 报错）=================
 type Json = Record<string, unknown> | unknown[];
-type SiteInput = {
-  category_id?: string;
+
+interface SitePayload {
+  id?: string;
+  category_id?: string | null;
   title?: string;
   url?: string;
   description?: string;
@@ -20,7 +23,22 @@ type SiteInput = {
   priority?: number;
   sort_order?: number;
   pinned?: number;
-};
+}
+
+interface CategoryPayload {
+  id?: string;
+  parent_id?: string | null;
+  name?: string;
+  slug?: string;
+  icon?: string;
+  sort_order?: number;
+}
+
+interface TodoPayload {
+  title?: string;
+  done?: number;
+  sort_order?: number;
+}
 
 const EMBEDDING_MODEL = "@cf/baai/bge-small-en-v1.5";
 const CHAT_MODEL = "@cf/meta/llama-3.1-8b-instruct";
@@ -90,6 +108,8 @@ async function route(request: Request, env: Env, ctx: ExecutionContext, url: URL
   throw new HttpError(404, "Route not found");
 }
 
+// ================= 核心业务逻辑 =================
+
 async function getBootstrap(env: Env): Promise<Response> {
   const [prefs, categories, sites, widgets, todos, health] = await Promise.all([
     getPrefs(env),
@@ -103,7 +123,7 @@ async function getBootstrap(env: Env): Promise<Response> {
 }
 
 async function getPrefs(env: Env): Promise<Record<string, unknown>> {
-  return (await env.NAV_KV.get("prefs:global", "json")) || {
+  return (await env.NAV_KV.get("prefs:global", "json")) as Record<string, unknown> || {
     theme: "dark",
     density: "compact",
     slogan: "37° Nav - 你的恒温个人数字入口，边缘原生，零维护永在线。"
@@ -121,7 +141,7 @@ function listCategories(env: Env): Promise<Response> {
 }
 
 async function createCategory(request: Request, env: Env): Promise<Response> {
-  const body = await readJson<Record<string, string | number | null>>(request);
+  const body = await readJson<CategoryPayload>(request);
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
   await env.NAV_DB.prepare(`
@@ -141,19 +161,20 @@ async function createCategory(request: Request, env: Env): Promise<Response> {
 }
 
 async function updateCategory(request: Request, env: Env, id: string): Promise<Response> {
-  const current = await first<Record<string, unknown>>(env, "SELECT * FROM categories WHERE id = ?", id);
+  const current = await first<CategoryPayload>(env, "SELECT * FROM categories WHERE id = ?", id);
   if (!current) throw new HttpError(404, "Category not found");
-  const body = await readJson<Record<string, unknown>>(request);
-  const merged = { ...current, ...body, updated_at: new Date().toISOString() };
+  const body = await readJson<CategoryPayload>(request);
+  const updated_at = new Date().toISOString();
+  
   await env.NAV_DB.prepare(`
     UPDATE categories SET parent_id = ?, name = ?, slug = ?, icon = ?, sort_order = ?, updated_at = ? WHERE id = ?
   `).bind(
-    merged.parent_id || null,
-    merged.name,
-    merged.slug,
-    merged.icon,
-    Number(merged.sort_order || 0),
-    merged.updated_at,
+    body.parent_id !== undefined ? body.parent_id : current.parent_id,
+    body.name !== undefined ? body.name : current.name,
+    body.slug !== undefined ? body.slug : current.slug,
+    body.icon !== undefined ? body.icon : current.icon,
+    body.sort_order !== undefined ? Number(body.sort_order) : Number(current.sort_order || 0),
+    updated_at,
     id
   ).run();
   return json({ ok: true });
@@ -170,10 +191,10 @@ async function getSite(env: Env, id: string): Promise<Response> {
 }
 
 async function createSite(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  const body = await readJson<SiteInput>(request);
+  const body = await readJson<SitePayload>(request);
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const site = normalizeSite({ ...body, id, created_at: now, updated_at: now });
+  const site = normalizeSite({ ...(body as any), id, created_at: now, updated_at: now });
   await env.NAV_DB.prepare(`
     INSERT INTO sites (
       id, category_id, title, url, description, icon, tags_text, priority, sort_order, pinned,
@@ -194,15 +215,15 @@ async function createSite(request: Request, env: Env, ctx: ExecutionContext): Pr
     now,
     now
   ).run();
-  ctx.waitUntil(upsertSiteVector(env, id, site.search_text));
+  ctx.waitUntil(upsertSiteVector(env, id, String(site.search_text)));
   return json({ ok: true, id }, undefined, 201);
 }
 
 async function updateSite(request: Request, env: Env, ctx: ExecutionContext, id: string): Promise<Response> {
-  const current = await first<Record<string, unknown>>(env, "SELECT * FROM sites WHERE id = ?", id);
+  const current = await first<SitePayload>(env, "SELECT * FROM sites WHERE id = ?", id);
   if (!current) throw new HttpError(404, "Site not found");
-  const body = await readJson<SiteInput>(request);
-  const site = normalizeSite({ ...current, ...body, updated_at: new Date().toISOString() });
+  const body = await readJson<SitePayload>(request);
+  const site = normalizeSite({ ...(current as any), ...(body as any), updated_at: new Date().toISOString() });
   await env.NAV_DB.prepare(`
     UPDATE sites SET
       category_id = ?, title = ?, url = ?, description = ?, icon = ?, tags_text = ?,
@@ -222,7 +243,7 @@ async function updateSite(request: Request, env: Env, ctx: ExecutionContext, id:
     site.updated_at,
     id
   ).run();
-  ctx.waitUntil(upsertSiteVector(env, id, site.search_text));
+  ctx.waitUntil(upsertSiteVector(env, id, String(site.search_text)));
   await env.NAV_KV.delete(`cache:site:${id}`);
   return json({ ok: true });
 }
@@ -268,6 +289,67 @@ async function searchSites(env: Env, url: URL): Promise<Response> {
   return json({ sites: merged.slice(0, 40), vectorMatches: matches.matches.length });
 }
 
+// ================= AI 增强区域 =================
+
+// 【核心修复：网页爬虫工具】
+async function fetchUrlMeta(url: string): Promise<string> {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      }
+    });
+    if (!response.ok) return "";
+    
+    const html = await response.text();
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) || 
+                      html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/i);
+    
+    const title = titleMatch ? titleMatch[1].trim() : "";
+    const desc = descMatch ? descMatch[1].trim() : "";
+    
+    if (title || desc) {
+      return `【网页真实数据】\n标题: ${title}\n描述: ${desc}`;
+    }
+    return "";
+  } catch (e) {
+    return ""; 
+  }
+}
+
+// 【终极 AI 解析与抓取合并】
+async function aiParse(request: Request, env: Env): Promise<Response> {
+  const { prompt } = await readJson<{ prompt: string }>(request);
+  
+  // 提取用户输入中的网址，并利用爬虫去抓取网站真正的 description
+  const urlMatch = prompt.match(/https?:\/\/[^\s]+/);
+  let webContext = "";
+  if (urlMatch) {
+    webContext = await fetchUrlMeta(urlMatch[0]);
+  }
+
+  const categories = await all(env, "SELECT id, name, slug FROM categories ORDER BY sort_order");
+  const ai = await env.AI.run(CHAT_MODEL, {
+    messages: [
+      {
+        role: "system",
+        content: [
+          "你是 37° Nav 的导航整理助手。",
+          "必须直接输出纯 JSON 对象，绝对不要使用 Markdown 代码块包围，不要输出任何废话。",
+          "需要输出的字段: title, url, description, category_slug, tags(数组), icon(一个emoji)。",
+          "请根据用户提供的【网页真实数据】来精准提炼 description (控制在50字以内) 和 tags。"
+        ].join("\n")
+      },
+      { 
+        role: "user", 
+        content: JSON.stringify({ prompt, extracted_info: webContext, categories }) 
+      }
+    ]
+  });
+  return json({ parsed: parseAiJson(ai) });
+}
+
 async function aiAddSite(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const { prompt } = await readJson<{ prompt: string }>(request);
   const categories = await all(env, "SELECT id, name, slug FROM categories ORDER BY sort_order");
@@ -286,7 +368,6 @@ async function aiAddSite(request: Request, env: Env, ctx: ExecutionContext): Pro
   });
   const parsed = parseAiJson(ai);
   
-  // 【终极兜底机制】万一 AI 犯傻丢了 URL，直接从用户输入里强行提取网址！
   const urlMatch = prompt.match(/https?:\/\/[^\s]+/);
   const fallbackUrl = urlMatch ? urlMatch[0] : prompt;
 
@@ -317,6 +398,8 @@ async function aiOrganize(env: Env): Promise<Response> {
   });
   return json({ suggestions: parseAiJson(ai).suggestions || [] });
 }
+
+// ================= 其他业务逻辑 =================
 
 function listWidgets(env: Env): Promise<Response> {
   return dbJson(env, "SELECT * FROM widgets WHERE enabled = 1 ORDER BY y, x, created_at", "widgets");
@@ -350,7 +433,7 @@ function listTodos(env: Env): Promise<Response> {
 }
 
 async function createTodo(request: Request, env: Env): Promise<Response> {
-  const body = await readJson<{ title: string; sort_order?: number }>(request);
+  const body = await readJson<TodoPayload>(request);
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
   await env.NAV_DB.prepare("INSERT INTO todos (id, title, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
@@ -360,12 +443,19 @@ async function createTodo(request: Request, env: Env): Promise<Response> {
 }
 
 async function updateTodo(request: Request, env: Env, id: string): Promise<Response> {
-  const current = await first<Record<string, unknown>>(env, "SELECT * FROM todos WHERE id = ?", id);
+  const current = await first<TodoPayload>(env, "SELECT * FROM todos WHERE id = ?", id);
   if (!current) throw new HttpError(404, "Todo not found");
-  const body = await readJson<Record<string, unknown>>(request);
-  const merged = { ...current, ...body, updated_at: new Date().toISOString() };
+  const body = await readJson<TodoPayload>(request);
+  const updated_at = new Date().toISOString();
+  
   await env.NAV_DB.prepare("UPDATE todos SET title = ?, done = ?, sort_order = ?, updated_at = ? WHERE id = ?")
-    .bind(merged.title, Number(merged.done || 0), Number(merged.sort_order || 0), merged.updated_at, id)
+    .bind(
+      body.title !== undefined ? body.title : current.title,
+      body.done !== undefined ? Number(body.done) : Number(current.done || 0),
+      body.sort_order !== undefined ? Number(body.sort_order) : Number(current.sort_order || 0),
+      updated_at,
+      id
+    )
     .run();
   return json({ ok: true });
 }
@@ -516,7 +606,7 @@ async function importData(request: Request, env: Env, ctx: ExecutionContext): Pr
       raw.created_at || new Date().toISOString(),
       new Date().toISOString()
     ));
-    ctx.waitUntil(upsertSiteVector(env, String(site.id), site.search_text));
+    ctx.waitUntil(upsertSiteVector(env, String(site.id), String(site.search_text)));
   }
   if (batches.length) await env.NAV_DB.batch(batches);
   return json({ ok: true, imported: batches.length });
@@ -706,14 +796,13 @@ function slugify(value: string): string {
   return value.toLowerCase().normalize("NFKD").replace(/[^\w\s-]/g, "").trim().replace(/[\s_-]+/g, "-") || crypto.randomUUID();
 }
 
-function parseAiJson(result: unknown): Record<string, unknown> {
+function parseAiJson(result: unknown): Record<string, any> {
   let content = typeof result === "object" && result && "response" in result
     ? String((result as { response: unknown }).response)
     : typeof result === "object" && result && "choices" in result
       ? String((result as { choices: { message?: { content?: string } }[] }).choices?.[0]?.message?.content || "{}")
       : JSON.stringify(result || {});
   
-  // 【新增过滤】暴力清除 AI 爱乱加的 Markdown 代码块干扰
   content = content.replace(/```json/gi, "").replace(/```/g, "").trim();
   
   try {
@@ -728,21 +817,4 @@ class HttpError extends Error {
   constructor(public status: number, message: string) {
     super(message);
   }
-}async function aiParse(request: Request, env: Env): Promise<Response> {
-  const { prompt } = await readJson<{ prompt: string }>(request);
-  const categories = await all(env, "SELECT id, name, slug FROM categories ORDER BY sort_order");
-  const ai = await env.AI.run(CHAT_MODEL, {
-    messages: [
-      {
-        role: "system",
-        content: [
-          "你是 37° Nav 的导航整理助手。",
-          "必须直接输出纯 JSON 对象，绝对不要使用 Markdown 代码块包围，不要输出任何废话。",
-          "需要输出的字段: title, url, description, category_slug, tags(数组), icon(一个emoji)。"
-        ].join("\n")
-      },
-      { role: "user", content: JSON.stringify({ prompt, categories }) }
-    ]
-  });
-  return json({ parsed: parseAiJson(ai) });
 }
