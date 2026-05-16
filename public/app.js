@@ -1,4 +1,3 @@
-// 【修复1】：恢复配置读取与 API 基础路径
 const config = window.__NAV_CONFIG__ || {};
 const apiBase = (config.apiBase || "").replace(/\/$/, "");
 const isAdminPage = window.location.pathname.includes("admin");
@@ -33,7 +32,6 @@ function escapeAttr(unsafe) {
   return (unsafe || "").toString().replace(/"/g, "&quot;");
 }
 
-// 【修复2】：恢复正确的带 Header 和 apiBase 的网络请求
 async function api(path, options = {}) {
   setStatus("Syncing...");
   try {
@@ -54,12 +52,10 @@ async function api(path, options = {}) {
 
 async function refresh() {
   try {
-    const [sitesData, catsData] = await Promise.all([
-      api("/api/sites"),
-      api("/api/categories")
-    ]);
-    state.sites = sitesData.results || [];
-    state.categories = catsData.results || [];
+    // 【核心修复】：精准匹配后端的 /api/bootstrap 接口
+    const data = await api("/api/bootstrap");
+    state.sites = data.sites || [];
+    state.categories = data.categories || [];
     
     const catSelect = $("select[name='category_id']");
     if (catSelect) {
@@ -253,18 +249,17 @@ function openSiteDialog(site = null) {
   $("#siteDialog").showModal();
 }
 
-// ================= 主线执行 =================
 async function init() {
   await refresh();
   
   const searchInput = $("#searchInput");
-  const searchBtn = $("#searchBtn");
+  const searchBtn = $("#searchBtn") || $("#semanticBtn"); // 兼容访客页和管理页
   if (searchBtn && searchInput) {
     searchBtn.onclick = async () => {
       const q = searchInput.value.trim();
       if (!q) return renderSites(state.sites);
-      const res = await api(`/api/search?q=${encodeURIComponent(q)}`);
-      renderSites(res.results || []);
+      const res = await api(`/api/search?q=${encodeURIComponent(q)}&semantic=1`);
+      renderSites(res.sites || []);
     };
     searchInput.onkeyup = (e) => {
       if (e.key === "Enter") searchBtn.click();
@@ -272,7 +267,7 @@ async function init() {
   }
 
   if (isAdminPage) {
-    const addSiteBtn = $("#addSiteBtn"); // 新增站点绑定
+    const addSiteBtn = $("#addSiteBtn"); 
     if (addSiteBtn) addSiteBtn.onclick = () => openSiteDialog();
     const cancelSiteBtn = $("#cancelSiteBtn");
     if (cancelSiteBtn) cancelSiteBtn.onclick = () => $("#siteDialog").close();
@@ -308,7 +303,6 @@ async function init() {
       };
     }
 
-    // 【修复3】找回丢失的按钮绑定功能
     const healthBtn = $("#healthBtn");
     if (healthBtn) {
       healthBtn.onclick = async () => {
@@ -382,5 +376,4 @@ async function init() {
   }
 }
 
-// 启动指挥中心
 init();
