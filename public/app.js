@@ -1,4 +1,8 @@
-const isAdminPage = window.location.pathname.includes("admin.html");
+// 【修复1】：恢复配置读取与 API 基础路径
+const config = window.__NAV_CONFIG__ || {};
+const apiBase = (config.apiBase || "").replace(/\/$/, "");
+const isAdminPage = window.location.pathname.includes("admin");
+
 const state = {
   sites: [],
   categories: [],
@@ -29,10 +33,14 @@ function escapeAttr(unsafe) {
   return (unsafe || "").toString().replace(/"/g, "&quot;");
 }
 
+// 【修复2】：恢复正确的带 Header 和 apiBase 的网络请求
 async function api(path, options = {}) {
   setStatus("Syncing...");
   try {
-    const res = await fetch(path, options);
+    const res = await fetch(`${apiBase}${path}`, {
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      ...options
+    });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
     setStatus("System OK");
@@ -174,7 +182,7 @@ function renderSites(sites) {
             <a href="${escapeAttr(site.url)}" target="_blank" rel="noreferrer" data-visit="${site.id}">
               ${escapeHtml(site.title)}
             </a>
-            <div class="site-desc">${escapeHtml(site.description || "AI 未能生成描述")}</div>
+            <div class="site-desc">${escapeHtml(site.description || "暂无描述")}</div>
           </div>
           <div>
             ${isAdminPage ? `<button class="edit-btn" data-edit="${site.id}" title="编辑">✎</button>` : '<span class="arrow-icon">↗</span>'}
@@ -188,7 +196,7 @@ function renderSites(sites) {
         </div>
       </article>
     `;
-  }).join("") || `<p class="tagline">矩阵暂无数据，请等待指挥官入库操作。</p>`;
+  }).join("") || `<p class="tagline" style="margin-top: 20px;">矩阵暂无数据，请等待指挥官入库操作。</p>`;
 
   document.querySelectorAll("[data-visit]").forEach((link) => {
     link.addEventListener("click", () => {
@@ -245,8 +253,9 @@ function openSiteDialog(site = null) {
   $("#siteDialog").showModal();
 }
 
-window.onload = () => {
-  refresh();
+// ================= 主线执行 =================
+async function init() {
+  await refresh();
   
   const searchInput = $("#searchInput");
   const searchBtn = $("#searchBtn");
@@ -263,7 +272,7 @@ window.onload = () => {
   }
 
   if (isAdminPage) {
-    const addSiteBtn = $("#addSiteBtn");
+    const addSiteBtn = $("#addSiteBtn"); // 新增站点绑定
     if (addSiteBtn) addSiteBtn.onclick = () => openSiteDialog();
     const cancelSiteBtn = $("#cancelSiteBtn");
     if (cancelSiteBtn) cancelSiteBtn.onclick = () => $("#siteDialog").close();
@@ -299,6 +308,44 @@ window.onload = () => {
       };
     }
 
+    // 【修复3】找回丢失的按钮绑定功能
+    const healthBtn = $("#healthBtn");
+    if (healthBtn) {
+      healthBtn.onclick = async () => {
+        setStatus("站点健康巡检中...");
+        await api("/api/health-check/run", { method: "POST" });
+        await refresh();
+        setStatus("巡检指令已发送");
+      };
+    }
+
+    const exportBtn = $("#exportBtn");
+    if (exportBtn) {
+      exportBtn.onclick = async () => {
+        const data = await api("/api/export");
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `37-nav-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+    }
+
+    const importFile = $("#importFile");
+    if (importFile) {
+      importFile.onchange = async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        setStatus("数据恢复中...");
+        const data = JSON.parse(await file.text());
+        await api("/api/import", { method: "POST", body: JSON.stringify(data) });
+        await refresh();
+        setStatus("数据恢复完成");
+      };
+    }
+
     const aiParseBtn = $("#aiParseBtn");
     if (aiParseBtn) {
       aiParseBtn.onclick = async () => {
@@ -325,7 +372,7 @@ window.onload = () => {
           }
         } catch (e) {
           console.error(e);
-          alert("AI 识别链路断开，请检查网址连通性或手动输入。");
+          alert("AI 识别链路断开，请检查网址连通性或稍后再试。");
         } finally {
           aiParseBtn.textContent = originalText;
           aiParseBtn.disabled = false;
@@ -333,4 +380,7 @@ window.onload = () => {
       };
     }
   }
-};
+}
+
+// 启动指挥中心
+init();

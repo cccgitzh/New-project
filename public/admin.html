@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>37° Nav - 星际指挥中心 (管理后台)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <div class="shell">
@@ -17,7 +17,15 @@
         </div>
       </div>
       <nav id="categoryList" class="category-list"></nav>
-      <button id="addCatBtn" class="ghost add-cat-btn">+ 新建分类</button>
+      <button id="addCatBtn" class="ghost add-cat-btn" style="margin-top: 16px;">+ 新建分类</button>
+      
+      <div style="margin-top: auto; display: flex; flex-direction: column; gap: 12px; padding-top: 20px; border-top: 1px solid rgba(0,243,255,0.1);">
+        <button id="exportBtn" class="ghost">导出备份</button>
+        <label class="ghost" style="text-align: center; cursor: pointer; display: block; font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">
+          导入备份
+          <input id="importFile" type="file" accept="application/json" hidden />
+        </label>
+      </div>
     </aside>
 
     <main class="main">
@@ -32,13 +40,14 @@
       <section class="command">
         <input id="searchInput" placeholder="搜索站点，或输入指令..." />
         <button id="searchBtn" class="primary">语义搜索</button>
-        <button id="addSiteBtn" class="ghost">新增站点</button>
+        <button id="healthBtn" class="ghost">站点巡检</button>
       </section>
 
       <div class="grid">
         <section class="panel sites">
           <div class="panel-head">
             <h2>导航矩阵</h2>
+            <button id="addSiteBtn" class="ghost">新增站点</button>
           </div>
           <div id="sitesGrid" class="sites-grid"></div>
         </section>
@@ -90,6 +99,7 @@
     </form>
   </dialog>
 
-  <script src="app.js"></script>
+  <script src="./config.js"></script>
+  <script src="./app.js" type="module"></script>
 </body>
 </html>
