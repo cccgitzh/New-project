@@ -89,17 +89,25 @@ function renderSites(sites) {
     return `
       <article class="site-card" draggable="${isAdminPage ? 'true' : 'false'}" data-site="${site.id}">
         <div class="site-top">
-          <a href="${escapeAttr(site.url)}" target="_blank" rel="noreferrer" data-visit="${site.id}">
-            ${site.icon || "↗"} ${escapeHtml(site.title)}
-          </a>
-          ${isAdminPage ? `<button class="ghost" data-edit="${site.id}" title="编辑">编辑</button>` : ''}
+          <div class="site-icon-box">
+            ${site.icon || "🧭"}
+          </div>
+          <div class="site-info">
+            <a href="${escapeAttr(site.url)}" target="_blank" rel="noreferrer" data-visit="${site.id}">
+              ${escapeHtml(site.title)}
+            </a>
+            <div class="site-desc">${escapeHtml(site.description || "暂无描述")}</div>
+          </div>
+          <div>
+            ${isAdminPage ? `<button class="edit-btn" data-edit="${site.id}" title="编辑">✎</button>` : '<span class="arrow-icon">↗</span>'}
+          </div>
         </div>
-        <p>${escapeHtml(site.description || "无备注")}</p>
-        <div class="meta">
-          <span class="${healthClass}">● ${site.health_status || "unknown"}</span>
-          <span>访问 ${site.access_count || 0}</span>
+        <div class="site-bottom">
+          <div class="tags">${tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
+          <div class="meta">
+            <span class="${healthClass}">●</span> ${site.access_count || 0} 次访问
+          </div>
         </div>
-        <div class="tags">${tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
       </article>
     `;
   }).join("") || `<p class="tagline">这里还没有站点。让 AI 先帮你塞一枚小火种。</p>`;
