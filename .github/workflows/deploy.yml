@@ -2,7 +2,9 @@ name: Deploy 37 Nav
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
 jobs:
