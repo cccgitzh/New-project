@@ -156,15 +156,36 @@ function renderSites(sites) {
     const healthClass = site.health_status === "ok" ? "health-ok" : site.health_status === "down" ? "health-bad" : "";
     const tags = (site.tags_text || "").split(",").map((tag) => tag.trim()).filter(Boolean);
     
+  // 【自动提取网址的域名】
     let domain = "";
     try { domain = new URL(site.url).hostname; } catch(e) {}
     
+    // 【新增魔法】：常用大厂网站的“特权图标名单”，专治各种抓取不到的疑难杂症
+    const iconOverrides = {
+      "mail.google.com": "https://api.iconify.design/logos:google-gmail.svg",
+      "gmail.com": "https://api.iconify.design/logos:google-gmail.svg",
+      "github.com": "https://api.iconify.design/mdi:github.svg?color=%23ffffff",
+      "youtube.com": "https://api.iconify.design/logos:youtube-icon.svg",
+      "chatgpt.com": "https://api.iconify.design/logos:openai-icon.svg",
+      "x.com": "https://api.iconify.design/ri:twitter-x-fill.svg?color=%23ffffff",
+      "twitter.com": "https://api.iconify.design/ri:twitter-x-fill.svg?color=%23ffffff"
+    };
+    
     let iconContent = "";
     if (site.icon && site.icon.startsWith("http")) {
+      // 优先级 1：手动指定的图片
       iconContent = `<img src="${escapeAttr(site.icon)}" alt="logo" style="width: 100%; height: 100%; border-radius: 8px; object-fit: contain;">`;
     } else if (domain) {
-      iconContent = `<img src="https://s2.googleusercontent.com/s2/favicons?domain=${domain}&sz=128" alt="logo" style="width: 100%; height: 100%; border-radius: 8px; object-fit: contain;" onerror="this.outerHTML='<span>${site.icon || '🧭'}</span>'">`;
+      // 优先级 2：检查是否在“特权名单”中
+      const overrideIcon = iconOverrides[domain] || iconOverrides[domain.replace("www.", "")];
+      if (overrideIcon) {
+        iconContent = `<img src="${overrideIcon}" alt="logo" style="width: 100%; height: 100%; border-radius: 8px; object-fit: contain;">`;
+      } else {
+        // 优先级 3：自动调用 Favicon 抓取
+        iconContent = `<img src="https://s2.googleusercontent.com/s2/favicons?domain=${domain}&sz=128" alt="logo" style="width: 100%; height: 100%; border-radius: 8px; object-fit: contain;" onerror="this.outerHTML='<span>${site.icon || '🧭'}</span>'">`;
+      }
     } else {
+      // 兜底 Emoji
       iconContent = `<span>${site.icon || "🧭"}</span>`;
     }
 
