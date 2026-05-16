@@ -339,7 +339,8 @@ async function aiParse(request: Request, env: Env): Promise<Response> {
           "必须直接输出纯 JSON 对象，绝对不要使用 Markdown 代码块包围，不要输出任何废话。",
           "需要输出的字段: title, url, description, category_slug, tags(数组), icon(一个emoji)。",
           "请根据用户提供的【网页真实数据】来精准提炼 description (控制在50字以内) 和 tags。",
-          "【极其重要】：不管原网页是什么语言，所有的输出内容（特别是 title, description 和 tags）必须被翻译并使用【中文简体】输出！"
+          "【极其重要】：不管原网页是什么语言，所有的输出内容必须使用【中文简体】输出！",
+          "【反诈雷达】：如果【网页真实数据】看起来像是防火墙拦截、防爬虫验证或报错（如 Cloudflare, Just a moment, 403, 502, IPv6已关闭, Access denied 等），请直接忽略它！依靠你自己的大模型知识库来生成该网站的正确介绍。"
         ].join("\n")
       },
       { 
@@ -362,7 +363,8 @@ async function aiAddSite(request: Request, env: Env, ctx: ExecutionContext): Pro
           "你是 37° Nav 的边缘导航整理助手。",
           "必须直接输出纯 JSON 对象，绝对不要使用 Markdown 代码块包围，不要输出任何废话。",
           "需要输出的字段: title, url, description, category_slug, tags(数组), icon(一个emoji), priority(1-5)。",
-          "【极其重要】：不管原网页是什么语言，所有的输出内容（特别是 title, description 和 tags）必须被翻译并使用【中文简体】输出！"
+          "【极其重要】：不管原网页是什么语言，所有的输出内容必须使用【中文简体】输出！",
+          "【反诈雷达】：如果抓取到的网页数据包含报错、防火墙拦截或防爬虫提示（如 Cloudflare, 403, IPv6已关闭 等），请彻底无视该数据，直接动用你自己的知识储备来生成正确的网站信息。"
         ].join("\n")
       },
       { role: "user", content: JSON.stringify({ prompt, categories }) }
