@@ -276,26 +276,29 @@ async function aiAddSite(request: Request, env: Env, ctx: ExecutionContext): Pro
         role: "system",
         content: [
           "你是 37° Nav 的边缘导航整理助手。",
-          "只输出 JSON，不要 Markdown。",
-          "字段: title,url,description,category_slug,tags,icon,priority。",
-          "priority 为 1-5，tags 是短标签数组，icon 用一个简洁 emoji 或空字符串。",
-          "优先复用已有分类 slug。"
+          "必须直接输出纯 JSON 对象，绝对不要使用 Markdown 代码块包围，不要输出任何废话。",
+          "需要输出的字段: title, url, description, category_slug, tags(数组), icon(一个emoji), priority(1-5)。"
         ].join("\n")
       },
       { role: "user", content: JSON.stringify({ prompt, categories }) }
     ]
   });
   const parsed = parseAiJson(ai);
+  
+  // 【终极兜底机制】万一 AI 犯傻丢了 URL，直接从用户输入里强行提取网址！
+  const urlMatch = prompt.match(/https?:\/\/[^\s]+/);
+  const fallbackUrl = urlMatch ? urlMatch[0] : prompt;
+
   const category = categories.find((cat) => String(cat.slug) === String(parsed.category_slug));
   const fakeRequest = new Request("https://37-nav.local/api/sites", {
     method: "POST",
     body: JSON.stringify({
-      title: parsed.title,
-      url: parsed.url,
-      description: parsed.description,
+      title: parsed.title || "未命名站点",
+      url: parsed.url || fallbackUrl,
+      description: parsed.description || "AI 未能生成描述",
       category_id: category?.id || null,
       tags_text: Array.isArray(parsed.tags) ? parsed.tags.join(",") : "",
-      icon: parsed.icon || "",
+      icon: parsed.icon || "🧭",
       priority: Number(parsed.priority || 3)
     })
   });
