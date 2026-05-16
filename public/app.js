@@ -134,15 +134,22 @@ function renderSites(sites) {
     const healthClass = site.health_status === "ok" ? "health-ok" : site.health_status === "down" ? "health-bad" : "";
     const tags = (site.tags_text || "").split(",").map((tag) => tag.trim()).filter(Boolean);
     
-    // 【新增魔法】自动提取网址的域名
+  // 【自动提取网址的域名】
     let domain = "";
     try { domain = new URL(site.url).hostname; } catch(e) {}
     
-    // 【新增魔法】调用 Google API 获取 128px 高清 LOGO。
-    // 如果网站太小众没抓到，onerror 会自动触发，让它退化回原先的 Emoji
-    const iconContent = domain 
-        ? `<img src="https://s2.googleusercontent.com/s2/favicons?domain=${domain}&sz=128" alt="logo" style="width: 100%; height: 100%; border-radius: 8px; object-fit: contain;" onerror="this.outerHTML='<span>${site.icon || '🧭'}</span>'">`
-        : `<span>${site.icon || "🧭"}</span>`;
+    // 【图标生成逻辑升级：支持强制覆盖】
+    let iconContent = "";
+    if (site.icon && site.icon.startsWith("http")) {
+      // 优先级 1：如果你在图标框里填了具体的网络图片链接，直接强制使用！
+      iconContent = `<img src="${escapeAttr(site.icon)}" alt="logo" style="width: 100%; height: 100%; border-radius: 8px; object-fit: contain;">`;
+    } else if (domain) {
+      // 优先级 2：自动调用 Google API 抓取域名图标
+      iconContent = `<img src="https://s2.googleusercontent.com/s2/favicons?domain=${domain}&sz=128" alt="logo" style="width: 100%; height: 100%; border-radius: 8px; object-fit: contain;" onerror="this.outerHTML='<span>${site.icon || '🧭'}</span>'">`;
+    } else {
+      // 优先级 3：如果都没有，兜底显示 Emoji
+      iconContent = `<span>${site.icon || "🧭"}</span>`;
+    }
 
     return `
       <article class="site-card" draggable="${isAdminPage ? 'true' : 'false'}" data-site="${site.id}">
