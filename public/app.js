@@ -397,4 +397,25 @@ async function init() {
   }
 }
 
+// 【新增】外部搜索引擎跳转逻辑
+  document.querySelectorAll(".engine-btn").forEach(btn => {
+    btn.onclick = () => {
+      const q = $("#searchInput").value.trim();
+      if (!q) {
+        alert("请先在左侧输入你要搜索的内容！");
+        return $("#searchInput").focus();
+      }
+      
+      const engine = btn.dataset.engine;
+      const urls = {
+        google: `https://www.google.com/search?q=${encodeURIComponent(q)}`,
+        bing: `https://www.bing.com/search?q=${encodeURIComponent(q)}`,
+        github: `https://github.com/search?q=${encodeURIComponent(q)}`
+      };
+      
+      if (urls[engine]) {
+        window.open(urls[engine], "_blank");
+      }
+    };
+  });
 init();
