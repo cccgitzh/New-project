@@ -43,6 +43,40 @@ interface TodoPayload {
 const EMBEDDING_MODEL = "@cf/baai/bge-small-en-v1.5";
 const CHAT_MODEL = "@cf/meta/llama-3.1-8b-instruct";
 
+// 【新增】带超时与防卡死的网页元数据抓取器
+async function fetchUrlMeta(url: string): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      }
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) return "";
+
+    const html = await response.text();
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
+                      html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/i);
+
+    const title = titleMatch ? titleMatch[1].trim() : "";
+    const desc = descMatch ? descMatch[1].trim() : "";
+
+    if (title || desc) {
+      return `【网页真实数据】\n标题: ${title}\n描述: ${desc}`;
+    }
+    return "";
+  } catch (e) {
+    // 超时、网络错误、防火墙拦截等一律静默返回空，交给 AI 处理
+    return "";
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     return handleRequest(request, env, ctx);
@@ -291,11 +325,10 @@ async function searchSites(env: Env, url: URL): Promise<Response> {
 
 // ================= AI 增强区域 =================
 
-// 【加强版】智能识别函数
+// 【已强化】智能识别函数（防幻觉 + 超时爬虫）
 async function aiParse(request: Request, env: Env): Promise<Response> {
   const { prompt } = await readJson<{ prompt: string }>(request);
   
-  // 提取网址并尝试抓取
   const urlMatch = prompt.match(/https?:\/\/[^\s]+/);
   const targetUrl = urlMatch ? urlMatch[0] : prompt;
   let webContext = "";
@@ -315,7 +348,7 @@ async function aiParse(request: Request, env: Env): Promise<Response> {
 
 【核心规则】：
 1. 语言：所有内容必须被翻译成自然流畅的【中文简体】！描述请简练且专业，不超过 30 个字。
-2. 容错：如果“网页抓取数据”为空、或者提示防火墙拦截（如 403, Cloudflare, IPv6, 验证码等），请立刻无视它！直接动用你作为大语言模型的广泛常识库，准确识别该网站（如看到 youtube.com 就知道是全球最大视频网站，看到 x.com 就知道是推特）。
+2. 防幻觉（极其重要）：如果“网页抓取数据”为空，请根据你的知识库识别该网址。如果你完全不知道这个网址是什么（例如极其冷门或内部域名），绝对不要胡编乱造！请直接将 title 设为域名本身，description 填“暂无描述，请手动补充”，tags 填 ["未分类"]。
 3. 分类：category_slug 必须从以下候选中选择一个最合适的：[${categorySlugs}]。
 
 【完美输出示例】：
@@ -330,7 +363,6 @@ async function aiParse(request: Request, env: Env): Promise<Response> {
       },
       { 
         role: "user", 
-        // 放弃复杂的 JSON 嵌套，直接用大白话喂给模型，极大降低模型的理解难度
         content: `待解析网址/指令：${prompt}\n\n网页抓取数据：\n${webContext || "（抓取失败，请直接使用你自己的常识库准确识别该网站并生成中文介绍）"}` 
       }
     ]
@@ -338,7 +370,7 @@ async function aiParse(request: Request, env: Env): Promise<Response> {
   return json({ parsed: parseAiJson(ai) });
 }
 
-// 【加强版】一键入库函数
+// 【已强化】一键入库函数（防幻觉 + 超时爬虫）
 async function aiAddSite(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const { prompt } = await readJson<{ prompt: string }>(request);
   
@@ -361,7 +393,7 @@ async function aiAddSite(request: Request, env: Env, ctx: ExecutionContext): Pro
 
 【核心规则】：
 1. 语言：必须输出专业的【中文简体】，描述不超过 30 个字。
-2. 容错：若抓取数据为空或报错，立刻无视它，利用你的常识库准确识别该网站（如 youtube.com 是视频平台）。
+2. 防幻觉（极其重要）：如果你完全不认识目标网址且没有抓取数据，绝不允许胡编乱造！强制将 description 设为“暂无描述，请手动补充”，tags 设为 ["未知"]。
 3. 分类：category_slug 必须从以下候选中选择：[${categorySlugs}]。
 
 【完美输出示例】：
