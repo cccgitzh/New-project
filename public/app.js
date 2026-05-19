@@ -20,12 +20,7 @@ function setStatus(msg, isError = false) {
 }
 
 function escapeHtml(unsafe) {
-  return (unsafe || "").toString()
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+  return (unsafe || "").toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 function escapeAttr(unsafe) {
@@ -41,10 +36,10 @@ async function api(path, options = {}) {
     });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
-    setStatus("System OK");
+    setStatus("OK");
     return data;
   } catch (err) {
-    setStatus("Sync Error", true);
+    setStatus("Error", true);
     console.error(err);
     throw err;
   }
@@ -52,7 +47,6 @@ async function api(path, options = {}) {
 
 async function refresh() {
   try {
-    // 【核心修复】：精准匹配后端的 /api/bootstrap 接口
     const data = await api("/api/bootstrap");
     state.sites = data.sites || [];
     state.categories = data.categories || [];
@@ -156,11 +150,9 @@ function renderSites(sites) {
     const healthClass = site.health_status === "ok" ? "health-ok" : site.health_status === "down" ? "health-bad" : "";
     const tags = (site.tags_text || "").split(",").map((tag) => tag.trim()).filter(Boolean);
     
-  // 【自动提取网址的域名】
     let domain = "";
     try { domain = new URL(site.url).hostname; } catch(e) {}
     
-    // 【新增魔法】：常用大厂网站的“特权图标名单”，专治各种抓取不到的疑难杂症
     const iconOverrides = {
       "mail.google.com": "https://api.iconify.design/logos:google-gmail.svg",
       "gmail.com": "https://api.iconify.design/logos:google-gmail.svg",
@@ -173,19 +165,15 @@ function renderSites(sites) {
     
     let iconContent = "";
     if (site.icon && site.icon.startsWith("http")) {
-      // 优先级 1：手动指定的图片
       iconContent = `<img src="${escapeAttr(site.icon)}" alt="logo" style="width: 100%; height: 100%; border-radius: 8px; object-fit: contain;">`;
     } else if (domain) {
-      // 优先级 2：检查是否在“特权名单”中
       const overrideIcon = iconOverrides[domain] || iconOverrides[domain.replace("www.", "")];
       if (overrideIcon) {
         iconContent = `<img src="${overrideIcon}" alt="logo" style="width: 100%; height: 100%; border-radius: 8px; object-fit: contain;">`;
       } else {
-        // 优先级 3：自动调用 Favicon 抓取
         iconContent = `<img src="https://s2.googleusercontent.com/s2/favicons?domain=${domain}&sz=128" alt="logo" style="width: 100%; height: 100%; border-radius: 8px; object-fit: contain;" onerror="this.outerHTML='<span>${site.icon || '🧭'}</span>'">`;
       }
     } else {
-      // 兜底 Emoji
       iconContent = `<span>${site.icon || "🧭"}</span>`;
     }
 
@@ -213,7 +201,7 @@ function renderSites(sites) {
         </div>
       </article>
     `;
-  }).join("") || `<p class="tagline" style="margin-top: 20px;">矩阵暂无数据，请等待指挥官入库操作。</p>`;
+  }).join("") || `<p style="color: var(--text-muted); font-size: 14px;">矩阵暂无数据，请等待指挥官入库操作。</p>`;
 
   document.querySelectorAll("[data-visit]").forEach((link) => {
     link.addEventListener("click", () => {
@@ -273,22 +261,69 @@ function openSiteDialog(site = null) {
 async function init() {
   await refresh();
   
+  // 【新增魔法 1】：全局快捷键 ⌘ K 唤醒搜索舱
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      e.preventDefault();
+      $("#searchInput")?.focus();
+    }
+  });
+
   const searchInput = $("#searchInput");
-  const searchBtn = $("#searchBtn") || $("#semanticBtn"); // 兼容访客页和管理页
-  if (searchBtn && searchInput) {
-    searchBtn.onclick = async () => {
+  const semanticBtn = $("#semanticBtn");
+  
+  // 监听本地输入框打字进行极速检索
+  if (searchInput) {
+    searchInput.oninput = () => {
+      const q = searchInput.value.trim().toLowerCase();
+      if (!q) return renderSites(state.sites);
+      const filtered = state.sites.filter(s => 
+        (s.title || "").toLowerCase().includes(q) || 
+        (s.description || "").toLowerCase().includes(q) || 
+        (s.tags_text || "").toLowerCase().includes(q) ||
+        (s.url || "").toLowerCase().includes(q)
+      );
+      renderSites(filtered);
+    };
+    searchInput.onkeyup = (e) => {
+      if (e.key === "Enter" && semanticBtn) semanticBtn.click();
+    };
+  }
+
+  // 语义检索按钮
+  if (semanticBtn && searchInput) {
+    semanticBtn.onclick = async () => {
       const q = searchInput.value.trim();
       if (!q) return renderSites(state.sites);
       const res = await api(`/api/search?q=${encodeURIComponent(q)}&semantic=1`);
       renderSites(res.sites || []);
     };
-    searchInput.onkeyup = (e) => {
-      if (e.key === "Enter") searchBtn.click();
-    };
   }
 
+  // 【新增魔法 2】：外部搜索引擎快捷跳转逻辑
+  document.querySelectorAll(".engine-btn").forEach(btn => {
+    btn.onclick = () => {
+      const q = $("#searchInput").value.trim();
+      if (!q) {
+        alert("指挥官，请先在搜索框输入指令！");
+        return $("#searchInput").focus();
+      }
+      
+      const engine = btn.dataset.engine;
+      const urls = {
+        google: `https://www.google.com/search?q=${encodeURIComponent(q)}`,
+        bing: `https://www.bing.com/search?q=${encodeURIComponent(q)}`,
+        github: `https://github.com/search?q=${encodeURIComponent(q)}`
+      };
+      
+      if (urls[engine]) {
+        window.open(urls[engine], "_blank");
+      }
+    };
+  });
+
   if (isAdminPage) {
-    const addSiteBtn = $("#addSiteBtn"); 
+    const addSiteBtn = $("#newSiteBtn"); 
     if (addSiteBtn) addSiteBtn.onclick = () => openSiteDialog();
     const cancelSiteBtn = $("#cancelSiteBtn");
     if (cancelSiteBtn) cancelSiteBtn.onclick = () => $("#siteDialog").close();
@@ -327,10 +362,10 @@ async function init() {
     const healthBtn = $("#healthBtn");
     if (healthBtn) {
       healthBtn.onclick = async () => {
-        setStatus("站点健康巡检中...");
+        setStatus("健康巡检中...");
         await api("/api/health-check/run", { method: "POST" });
         await refresh();
-        setStatus("巡检指令已发送");
+        setStatus("指令已发送");
       };
     }
 
@@ -357,7 +392,7 @@ async function init() {
         const data = JSON.parse(await file.text());
         await api("/api/import", { method: "POST", body: JSON.stringify(data) });
         await refresh();
-        setStatus("数据恢复完成");
+        setStatus("恢复完成");
       };
     }
 
@@ -365,7 +400,7 @@ async function init() {
     if (aiParseBtn) {
       aiParseBtn.onclick = async () => {
         const prompt = $("#aiParseInput").value.trim();
-        if (!prompt) return alert("警告：空指令。请在输入框内粘贴网址或介绍文字。");
+        if (!prompt) return alert("警告：请在输入框内粘贴网址或介绍文字。");
         
         const originalText = aiParseBtn.textContent;
         aiParseBtn.textContent = "量子解析中...";
@@ -387,7 +422,7 @@ async function init() {
           }
         } catch (e) {
           console.error(e);
-          alert("AI 识别链路断开，请检查网址连通性或稍后再试。");
+          alert("AI 识别链路断开，请检查连通性。");
         } finally {
           aiParseBtn.textContent = originalText;
           aiParseBtn.disabled = false;
@@ -397,25 +432,4 @@ async function init() {
   }
 }
 
-// 【新增】外部搜索引擎跳转逻辑
-  document.querySelectorAll(".engine-btn").forEach(btn => {
-    btn.onclick = () => {
-      const q = $("#searchInput").value.trim();
-      if (!q) {
-        alert("请先在左侧输入你要搜索的内容！");
-        return $("#searchInput").focus();
-      }
-      
-      const engine = btn.dataset.engine;
-      const urls = {
-        google: `https://www.google.com/search?q=${encodeURIComponent(q)}`,
-        bing: `https://www.bing.com/search?q=${encodeURIComponent(q)}`,
-        github: `https://github.com/search?q=${encodeURIComponent(q)}`
-      };
-      
-      if (urls[engine]) {
-        window.open(urls[engine], "_blank");
-      }
-    };
-  });
 init();
