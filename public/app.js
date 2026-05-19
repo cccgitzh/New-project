@@ -158,7 +158,8 @@ function renderSites(sites) {
       "gmail.com": "https://api.iconify.design/logos:google-gmail.svg",
       "github.com": "https://api.iconify.design/mdi:github.svg?color=%23ffffff",
       "youtube.com": "https://api.iconify.design/logos:youtube-icon.svg",
-      "chatgpt.com": "https://api.iconify.design/logos:openai-icon.svg",
+      "chatgpt.com": "https://api.iconify.design/ri:openai-fill.svg?color=%23ffffff",
+      "openai.com": "https://api.iconify.design/ri:openai-fill.svg?color=%23ffffff",
       "x.com": "https://api.iconify.design/ri:twitter-x-fill.svg?color=%23ffffff",
       "twitter.com": "https://api.iconify.design/ri:twitter-x-fill.svg?color=%23ffffff"
     };

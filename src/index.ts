@@ -291,91 +291,99 @@ async function searchSites(env: Env, url: URL): Promise<Response> {
 
 // ================= AI 增强区域 =================
 
-// 【核心修复：网页爬虫工具】
-async function fetchUrlMeta(url: string): Promise<string> {
-  try {
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      }
-    });
-    if (!response.ok) return "";
-    
-    const html = await response.text();
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-    const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) || 
-                      html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/i);
-    
-    const title = titleMatch ? titleMatch[1].trim() : "";
-    const desc = descMatch ? descMatch[1].trim() : "";
-    
-    if (title || desc) {
-      return `【网页真实数据】\n标题: ${title}\n描述: ${desc}`;
-    }
-    return "";
-  } catch (e) {
-    return ""; 
-  }
-}
-
-// 【终极 AI 解析与抓取合并】
+// 【加强版】智能识别函数
 async function aiParse(request: Request, env: Env): Promise<Response> {
   const { prompt } = await readJson<{ prompt: string }>(request);
   
-  // 提取用户输入中的网址，并利用爬虫去抓取网站真正的 description
+  // 提取网址并尝试抓取
   const urlMatch = prompt.match(/https?:\/\/[^\s]+/);
+  const targetUrl = urlMatch ? urlMatch[0] : prompt;
   let webContext = "";
   if (urlMatch) {
-    webContext = await fetchUrlMeta(urlMatch[0]);
+    webContext = await fetchUrlMeta(targetUrl);
   }
 
-  const categories = await all(env, "SELECT id, name, slug FROM categories ORDER BY sort_order");
+  const categories = await all<{slug: string}>(env, "SELECT id, name, slug FROM categories ORDER BY sort_order");
+  const categorySlugs = categories.map((c) => c.slug).join(", ");
+
   const ai = await env.AI.run(CHAT_MODEL, {
     messages: [
       {
         role: "system",
-        content: [
-          "你是 37° Nav 的导航整理助手。",
-          "必须直接输出纯 JSON 对象，绝对不要使用 Markdown 代码块包围，不要输出任何废话。",
-          "需要输出的字段: title, url, description, category_slug, tags(数组), icon(一个emoji)。",
-          "请根据用户提供的【网页真实数据】来精准提炼 description (控制在50字以内) 和 tags。",
-          "【极其重要】：不管原网页是什么语言，所有的输出内容必须使用【中文简体】输出！",
-          "【反诈雷达】：如果【网页真实数据】看起来像是防火墙拦截、防爬虫验证或报错（如 Cloudflare, Just a moment, 403, 502, IPv6已关闭, Access denied 等），请直接忽略它！依靠你自己的大模型知识库来生成该网站的正确介绍。"
-        ].join("\n")
+        content: `你是高级导航网站整理专家。必须直接输出纯 JSON 对象，绝对不要包含任何 Markdown 代码块标签（如 \`\`\`json ）。不要输出任何废话。
+需要生成的 JSON 字段: title(网站名), url(网址), description(网站简介), category_slug(分类标识), tags(3个短标签构成的数组), icon(1个emoji)。
+
+【核心规则】：
+1. 语言：所有内容必须被翻译成自然流畅的【中文简体】！描述请简练且专业，不超过 30 个字。
+2. 容错：如果“网页抓取数据”为空、或者提示防火墙拦截（如 403, Cloudflare, IPv6, 验证码等），请立刻无视它！直接动用你作为大语言模型的广泛常识库，准确识别该网站（如看到 youtube.com 就知道是全球最大视频网站，看到 x.com 就知道是推特）。
+3. 分类：category_slug 必须从以下候选中选择一个最合适的：[${categorySlugs}]。
+
+【完美输出示例】：
+{
+  "title": "YouTube",
+  "url": "https://www.youtube.com/",
+  "description": "全球最大的高质量视频分享与流媒体创作者平台。",
+  "category_slug": "tools",
+  "tags": ["视频", "流媒体", "娱乐"],
+  "icon": "▶️"
+}`
       },
       { 
         role: "user", 
-        content: JSON.stringify({ prompt, extracted_info: webContext, categories }) 
+        // 放弃复杂的 JSON 嵌套，直接用大白话喂给模型，极大降低模型的理解难度
+        content: `待解析网址/指令：${prompt}\n\n网页抓取数据：\n${webContext || "（抓取失败，请直接使用你自己的常识库准确识别该网站并生成中文介绍）"}` 
       }
     ]
   });
   return json({ parsed: parseAiJson(ai) });
 }
 
+// 【加强版】一键入库函数
 async function aiAddSite(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const { prompt } = await readJson<{ prompt: string }>(request);
-  const categories = await all(env, "SELECT id, name, slug FROM categories ORDER BY sort_order");
+  
+  const urlMatch = prompt.match(/https?:\/\/[^\s]+/);
+  const fallbackUrl = urlMatch ? urlMatch[0] : prompt;
+  let webContext = "";
+  if (urlMatch) {
+    webContext = await fetchUrlMeta(fallbackUrl);
+  }
+
+  const categories = await all<any>(env, "SELECT id, name, slug FROM categories ORDER BY sort_order");
+  const categorySlugs = categories.map((c: any) => c.slug).join(", ");
+
   const ai = await env.AI.run(CHAT_MODEL, {
     messages: [
       {
         role: "system",
-        content: [
-          "你是 37° Nav 的边缘导航整理助手。",
-          "必须直接输出纯 JSON 对象，绝对不要使用 Markdown 代码块包围，不要输出任何废话。",
-          "需要输出的字段: title, url, description, category_slug, tags(数组), icon(一个emoji), priority(1-5)。",
-          "【极其重要】：不管原网页是什么语言，所有的输出内容必须使用【中文简体】输出！",
-          "【反诈雷达】：如果抓取到的网页数据包含报错、防火墙拦截或防爬虫提示（如 Cloudflare, 403, IPv6已关闭 等），请彻底无视该数据，直接动用你自己的知识储备来生成正确的网站信息。"
-        ].join("\n")
+        content: `你是高级导航网站整理专家。必须直接输出纯 JSON 对象，绝对不要包含 Markdown 代码块标签。
+需要生成的 JSON 字段: title, url, description, category_slug, tags(数组), icon(一个emoji), priority(1-5的数字)。
+
+【核心规则】：
+1. 语言：必须输出专业的【中文简体】，描述不超过 30 个字。
+2. 容错：若抓取数据为空或报错，立刻无视它，利用你的常识库准确识别该网站（如 youtube.com 是视频平台）。
+3. 分类：category_slug 必须从以下候选中选择：[${categorySlugs}]。
+
+【完美输出示例】：
+{
+  "title": "YouTube",
+  "url": "https://www.youtube.com/",
+  "description": "全球最大的高质量视频分享与流媒体创作者平台。",
+  "category_slug": "tools",
+  "tags": ["视频", "流媒体", "娱乐"],
+  "icon": "▶️",
+  "priority": 5
+}`
       },
-      { role: "user", content: JSON.stringify({ prompt, categories }) }
+      { 
+        role: "user", 
+        content: `待解析指令：${prompt}\n\n网页抓取数据：\n${webContext || "（空。请靠常识识别）"}` 
+      }
     ]
   });
   const parsed = parseAiJson(ai);
   
-  const urlMatch = prompt.match(/https?:\/\/[^\s]+/);
-  const fallbackUrl = urlMatch ? urlMatch[0] : prompt;
-
-  const category = categories.find((cat) => String(cat.slug) === String(parsed.category_slug));
+  const category = categories.find((cat: any) => String(cat.slug) === String(parsed.category_slug));
   const fakeRequest = new Request("https://37-nav.local/api/sites", {
     method: "POST",
     body: JSON.stringify({
